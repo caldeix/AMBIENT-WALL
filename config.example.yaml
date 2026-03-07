@@ -1,0 +1,43 @@
+# Crypto Wall Dashboard — Configuracion de ejemplo
+# Copia este archivo a config.yaml y rellena los valores.
+# IMPORTANTE: config.yaml esta en .gitignore — nunca commitear la API key real.
+
+# ---------------------------------------------------------------------------
+# Pantalla
+# ---------------------------------------------------------------------------
+display:
+  fullscreen: true      # true en Raspberry Pi para modo cuadro
+  hide_cursor: false     # true en produccion (sin raton)
+
+# ---------------------------------------------------------------------------
+# API Keys
+# ---------------------------------------------------------------------------
+api_keys:
+  coinmarketcap: "TU_API_KEY_AQUI"   # https://coinmarketcap.com/api/
+
+# ---------------------------------------------------------------------------
+# Intervalos de refresco en segundos (minimo permitido: 60s)
+# Fuente de datos de cada item:
+#   btc_price  -> CoinMarketCap API  (precio BTC + ETH + SOL + XRP + DOT + ...)
+#   btc_chart  -> Yahoo Finance      (historial BTC 7d para sparkline)
+#   gold       -> Yahoo Finance      (Gold Futures GC=F, precio /oz)
+#   sp500      -> Yahoo Finance      (indice S&P 500 ^GSPC)
+#   weather    -> wttr.in Barcelona  (temperatura, viento, humedad — sin API key)
+#   news       -> RSS Cointelegraph + CoinDesk (sin API key)
+# ---------------------------------------------------------------------------
+refresh:
+  btc_price: 300     #  5 min  — CoinMarketCap
+  btc_chart: 300     #  5 min  — Yahoo Finance (sparkline)
+  gold:      1800    # 30 min  — Yahoo Finance
+  sp500:     1800    # 30 min  — Yahoo Finance
+  weather:   1800    # 30 min  — wttr.in
+  news:      1800    # 30 min  — RSS feeds
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: "INFO"          # DEBUG | INFO | WARNING | ERROR
+  file: "app.log"
+  max_bytes: 5242880     # 5 MB
+  backup_count: 3
