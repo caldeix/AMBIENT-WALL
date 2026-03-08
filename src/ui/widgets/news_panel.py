@@ -7,7 +7,7 @@ from ui.theme import (
 )
 from utils.formatting import time_ago, freshness_color
 
-ITEMS_VISIBLE = 4
+ITEMS_VISIBLE = 5
 ROTATE_MS     = 6_000   # ms entre rotaciones
 
 
@@ -71,7 +71,7 @@ class NewsPanel(tk.Frame):
 
             source_lbl = tk.Label(
                 meta, text="",
-                font=('Courier', 9, 'bold'), fg=ACCENT_NEWS, bg=bg, anchor='w',
+                font=('Courier', 12, 'bold'), fg=ACCENT_NEWS, bg=bg, anchor='w',
             )
             source_lbl.pack(side='left')
 
@@ -85,7 +85,7 @@ class NewsPanel(tk.Frame):
             title_lbl = tk.Label(
                 slot, text="",
                 font=FONT_LABEL, fg=TEXT_PRIMARY, bg=bg,
-                wraplength=460, justify='left', anchor='w',
+                wraplength=900, justify='left', anchor='w',
             )
             title_lbl.pack(fill='x')
 
