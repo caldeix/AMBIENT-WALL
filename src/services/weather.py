@@ -1,9 +1,13 @@
+import re
 import threading
 import time
 import random
 import logging
 
 import requests
+
+# Elimina solo los codigos de control de cursor/pantalla, NO los de color (SGR = ...m)
+_NON_SGR_RE = re.compile(r'\x1b\[(?![0-9;]*m)[0-9;]*[A-Za-z]')
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +102,7 @@ class WeatherService:
             'weather_code': None,
             'timestamp': None,
             'error': None,
+            'art_text': None,   # salida ASCII art de wttr.in (texto plano)
         }
         self._lock = threading.Lock()
 
@@ -145,10 +150,27 @@ class WeatherService:
             with self._lock:
                 self._cache['error'] = str(e)
 
+    def _fetch_art(self):
+        """Obtiene el ASCII art de wttr.in con formato de terminal."""
+        try:
+            url = f"https://wttr.in/{self.city}?lang=es"
+            resp = requests.get(
+                url,
+                timeout=10,
+                headers={'User-Agent': 'curl/7.68.0'},
+            )
+            resp.raise_for_status()
+            clean = _NON_SGR_RE.sub('', resp.text).rstrip()
+            with self._lock:
+                self._cache['art_text'] = clean
+        except Exception as e:
+            logger.warning(f"weather art: {e}")
+
     def _run(self):
         time.sleep(random.randint(2, 10))
         while True:
             self._fetch()
+            self._fetch_art()
             time.sleep(self.refresh_interval)
 
     def start(self):
