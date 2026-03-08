@@ -1,3 +1,4 @@
+import re
 import tkinter as tk
 import datetime
 
@@ -6,7 +7,6 @@ from ui.theme import (
     ACCENT_CLOCK, ERROR,
     FONT_TITLE, FONT_TIMESTAMP,
     FONT_CLOCK, FONT_CLOCK_SEC, FONT_CLOCK_DATE,
-    FONT_WEATHER_TEMP, FONT_WEATHER,
 )
 from utils.formatting import time_ago, freshness_color
 
@@ -19,244 +19,235 @@ MESES_ES = [
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 ]
 
-# Icono Unicode por codigo wttr.in
-def _weather_icon(code):
-    if code is None:
-        return "  "
-    if code == 113:
-        return "\u2600"   # ☀ Sol
-    if code == 116:
-        return "\u26c5"   # ⛅ Sol con nubes
-    if code in (119, 122):
-        return "\u2601"   # ☁ Nublado
-    if code in (143, 248, 260):
-        return "\U0001f32b"  # 🌫 Niebla
-    if code in (200, 386, 389, 392, 395):
-        return "\u26c8"   # ⛈ Tormenta
-    if code in (227, 230, 320, 323, 326, 329, 332, 335, 338, 368, 371):
-        return "\u2744"   # ❄ Nieve
-    if code in (179, 182, 317, 362, 365):
-        return "\u2603"   # ☃ Aguanieve
-    if code in (350, 374, 377):
-        return "\u26c6"   # ⛆ Granizo
-    return "\u2602"       # ☂ Lluvia
+_ART_FONT   = ('Courier', 6)
+_ART_HEIGHT = 28
 
-# Flecha de viento: direccion DESDE donde sopla -> apunta hacia donde VA el viento
-WIND_ARROWS = {
-    'N':   '\u2193',  # ↓
-    'NNE': '\u2199',  # ↙
-    'NE':  '\u2199',  # ↙
-    'ENE': '\u2190',  # ←
-    'E':   '\u2190',  # ←
-    'ESE': '\u2196',  # ↖
-    'SE':  '\u2196',  # ↖
-    'SSE': '\u2191',  # ↑
-    'S':   '\u2191',  # ↑
-    'SSW': '\u2197',  # ↗
-    'SW':  '\u2197',  # ↗
-    'WSW': '\u2192',  # →
-    'W':   '\u2192',  # →
-    'WNW': '\u2198',  # ↘
-    'NW':  '\u2198',  # ↘
-    'NNW': '\u2193',  # ↓
-}
+# ---------------------------------------------------------------------------
+# Parser ANSI SGR -> colores tkinter
+# ---------------------------------------------------------------------------
 
+_SGR_RE  = re.compile(r'\x1b\[([0-9;]*)m')
+_CTRL_RE = re.compile(r'\x1b\[(?![0-9;]*m)[0-9;]*[A-Za-z]')  # no-SGR (eliminar)
+
+# Paleta xterm-256 -> hex
+_XTERM_STD = [
+    '#1c1c1c', '#af0000', '#00af00', '#afaf00',
+    '#0000af', '#af00af', '#00afaf', '#afafaf',
+    '#626262', '#ff0000', '#00ff00', '#ffff00',
+    '#0000ff', '#ff00ff', '#00ffff', '#ffffff',
+]
+
+def _xterm_hex(n):
+    if n < 16:
+        return _XTERM_STD[n]
+    if n < 232:
+        n -= 16
+        r, g, b = n // 36, (n // 6) % 6, n % 6
+        def v(x): return 0 if x == 0 else 55 + x * 40
+        return f'#{v(r):02x}{v(g):02x}{v(b):02x}'
+    val = 8 + (n - 232) * 10
+    return f'#{val:02x}{val:02x}{val:02x}'
+
+
+def _parse_ansi(text):
+    """Yields (segment, fg_hex_or_None, bold) aplicando estados SGR."""
+    text = _CTRL_RE.sub('', text)
+    pos, fg, bold = 0, None, False
+
+    for m in _SGR_RE.finditer(text):
+        if m.start() > pos:
+            yield (text[pos:m.start()], fg, bold)
+
+        codes = [int(x) if x else 0 for x in m.group(1).split(';')] if m.group(1) else [0]
+        i = 0
+        while i < len(codes):
+            c = codes[i]
+            if c == 0:
+                fg, bold = None, False
+            elif c == 1:
+                bold = True
+            elif c in (2, 22):
+                bold = False
+            elif c == 38 and i + 1 < len(codes):
+                if codes[i + 1] == 5 and i + 2 < len(codes):       # 256-color
+                    fg = _xterm_hex(codes[i + 2]); i += 2
+                elif codes[i + 1] == 2 and i + 4 < len(codes):      # 24-bit RGB
+                    fg = f'#{codes[i+2]:02x}{codes[i+3]:02x}{codes[i+4]:02x}'; i += 4
+            elif c == 39:
+                fg = None
+            i += 1
+        pos = m.end()
+
+    if pos < len(text):
+        yield (text[pos:], fg, bold)
+
+
+# ---------------------------------------------------------------------------
+# Panel
+# ---------------------------------------------------------------------------
 
 class ClockWeatherPanel(tk.Frame):
-    """Cajon 4 — Reloj digital + tiempo de Barcelona (wttr.in)."""
+    """Cajon 4 — Reloj digital + ASCII art con colores de wttr.in."""
 
     def __init__(self, parent, weather_service, **kwargs):
         kwargs.setdefault('bg', BG_PANEL)
         super().__init__(parent, **kwargs)
         self._weather_service = weather_service
         self._bg = self.cget('bg')
+        self._known_tags = set()
         self._build_ui()
         self._tick()
         self._poll_weather()
 
     # ------------------------------------------------------------------
-    # Construccion del layout
+    # Layout
     # ------------------------------------------------------------------
 
     def _build_ui(self):
         bg = self._bg
 
-        # --- Header ---
+        # Header
         header = tk.Frame(self, bg=bg, height=32)
         header.pack(fill='x', padx=10, pady=(8, 4))
         header.pack_propagate(False)
 
-        tk.Label(
-            header, text="HORA & TIEMPO",
-            font=FONT_TITLE, fg=ACCENT_CLOCK, bg=bg,
-        ).pack(side='left', pady=4)
-
         self._fresh_dot = tk.Label(
-            header, text="\u25cf", font=('Courier', 10),
+            header, text='\u25cf', font=('Courier', 10),
             fg=TEXT_SECONDARY, bg=bg,
         )
         self._fresh_dot.pack(side='right', padx=(0, 6))
 
         self._fresh_label = tk.Label(
-            header, text="", font=FONT_TIMESTAMP,
+            header, text='', font=FONT_TIMESTAMP,
             fg=TEXT_SECONDARY, bg=bg,
         )
         self._fresh_label.pack(side='right')
 
-        # --- Separador ---
+        tk.Label(
+            header, text='HORA & TIEMPO',
+            font=FONT_TITLE, fg=ACCENT_CLOCK, bg=bg, anchor='center',
+        ).pack(side='left', fill='x', expand=True)
+
+        # Separador
         tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=8)
 
-        # --- Reloj (centrado, expandido) ---
+        # Reloj
         clock_frame = tk.Frame(self, bg=bg)
         clock_frame.pack(fill='both', expand=True, padx=12, pady=(6, 4))
 
-        # Spacer superior
         tk.Frame(clock_frame, bg=bg).pack(expand=True)
 
         time_row = tk.Frame(clock_frame, bg=bg)
         time_row.pack()
 
         self._time_label = tk.Label(
-            time_row, text="--:--",
+            time_row, text='--:--',
             font=FONT_CLOCK, fg=TEXT_PRIMARY, bg=bg,
         )
         self._time_label.pack(side='left')
 
         self._sec_label = tk.Label(
-            time_row, text=":--",
+            time_row, text=':--',
             font=FONT_CLOCK_SEC, fg=TEXT_SECONDARY, bg=bg,
         )
         self._sec_label.pack(side='left', anchor='s', pady=(0, 10))
 
         self._date_label = tk.Label(
-            clock_frame, text="",
+            clock_frame, text='',
             font=FONT_CLOCK_DATE, fg=TEXT_SECONDARY, bg=bg,
         )
         self._date_label.pack(pady=(2, 0))
 
-        # Spacer inferior
         tk.Frame(clock_frame, bg=bg).pack(expand=True)
 
-        # --- Separador ---
+        # Separador
         tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=8)
 
-        # --- Tiempo (seccion inferior) ---
-        weather_frame = tk.Frame(self, bg=bg)
-        weather_frame.pack(fill='both', expand=True, padx=16, pady=(8, 10))
+        # Bloque ASCII art wttr.in
+        weather_outer = tk.Frame(self, bg=bg)
+        weather_outer.pack(fill='both', expand=True, padx=10, pady=(6, 8))
 
-        # Fila principal: icono grande + temperatura + sensacion termica
-        top_row = tk.Frame(weather_frame, bg=bg)
-        top_row.pack(fill='x', pady=(0, 4))
-
-        self._icon_label = tk.Label(
-            top_row, text="",
-            font=('Courier', 28), fg=ACCENT_CLOCK, bg=bg,
+        self._art_text = tk.Text(
+            weather_outer,
+            bg=bg,
+            fg=ACCENT_CLOCK,
+            font=_ART_FONT,
+            relief='flat',
+            bd=0,
+            highlightthickness=0,
+            cursor='arrow',
+            state='disabled',
+            height=_ART_HEIGHT,
+            wrap='none',
+            selectbackground=bg,
         )
-        self._icon_label.pack(side='left', padx=(0, 14))
+        self._art_text.pack(fill='both', expand=True)
 
-        temp_col = tk.Frame(top_row, bg=bg)
-        temp_col.pack(side='left')
-
-        self._temp_label = tk.Label(
-            temp_col, text="--°C",
-            font=FONT_WEATHER_TEMP, fg=TEXT_PRIMARY, bg=bg, anchor='w',
-        )
-        self._temp_label.pack(anchor='w')
-
-        self._feels_label = tk.Label(
-            temp_col, text="Sensacion: --°C",
-            font=FONT_WEATHER, fg=TEXT_SECONDARY, bg=bg, anchor='w',
-        )
-        self._feels_label.pack(anchor='w')
-
-        # Descripcion del tiempo
-        self._desc_label = tk.Label(
-            weather_frame, text="",
-            font=FONT_WEATHER, fg=TEXT_SECONDARY, bg=bg, anchor='w',
-        )
-        self._desc_label.pack(fill='x', pady=(0, 6))
-
-        # Fila viento: flecha + velocidad + direccion
-        wind_row = tk.Frame(weather_frame, bg=bg)
-        wind_row.pack(fill='x', pady=(0, 4))
-
-        self._wind_arrow = tk.Label(
-            wind_row, text="",
-            font=('Courier', 18), fg=ACCENT_CLOCK, bg=bg,
-        )
-        self._wind_arrow.pack(side='left', padx=(0, 6))
-
-        self._wind_label = tk.Label(
-            wind_row, text="Viento: -- km/h",
-            font=FONT_WEATHER, fg=TEXT_SECONDARY, bg=bg,
-        )
-        self._wind_label.pack(side='left')
-
-        # Humedad
-        self._humidity_label = tk.Label(
-            weather_frame, text="Humedad: --%",
-            font=FONT_WEATHER, fg=TEXT_SECONDARY, bg=bg, anchor='w',
-        )
-        self._humidity_label.pack(fill='x')
+        self._art_text.tag_config('loading', foreground=TEXT_SECONDARY, justify='center')
+        self._art_text.tag_config('error',   foreground=ERROR,          justify='center')
 
     # ------------------------------------------------------------------
-    # Actualizacion del reloj (cada segundo, hilo principal)
+    # Reloj
     # ------------------------------------------------------------------
 
     def _tick(self):
         now = datetime.datetime.now()
-        self._time_label.config(text=now.strftime("%H:%M"))
+        self._time_label.config(text=now.strftime('%H:%M'))
         self._sec_label.config(text=f":{now.strftime('%S')}")
 
         dia = DIAS_ES[now.weekday()]
         mes = MESES_ES[now.month]
         self._date_label.config(
-            text=f"{dia}, {now.day} de {mes} de {now.year}"
+            text=f'{dia}, {now.day} de {mes} de {now.year}'
         )
         self.after(1000, self._tick)
 
     # ------------------------------------------------------------------
-    # Actualizacion del tiempo (polling cada 60s sobre cache del servicio)
+    # Tiempo
     # ------------------------------------------------------------------
+
+    def _get_tag(self, fg, bold):
+        """Devuelve (creando si hace falta) un tag con el color/estilo dado."""
+        safe = (fg or '').replace('#', '')
+        name = f'a_{safe}{"b" if bold else ""}'
+        if name not in self._known_tags:
+            font = (_ART_FONT[0], _ART_FONT[1], 'bold') if bold else _ART_FONT
+            self._art_text.tag_config(name, foreground=fg or ACCENT_CLOCK, font=font)
+            self._known_tags.add(name)
+        return name
 
     def _poll_weather(self):
         data = self._weather_service.get_data()
         self._update_weather(data)
-        if data['temp_c'] is None:
+        if data['art_text'] is None:
             self.after(5_000, self._poll_weather)
         else:
             self.after(60_000, self._poll_weather)
 
     def _update_weather(self, data):
-        if data['temp_c'] is None:
-            msg = "Cargando..." if data['error'] is None else "Sin datos"
-            self._temp_label.config(text="--°C", fg=TEXT_PRIMARY)
-            self._icon_label.config(text="")
-            self._desc_label.config(text=msg, fg=TEXT_SECONDARY)
-            self._feels_label.config(text="Sensacion: --°C")
-            self._wind_arrow.config(text="")
-            self._wind_label.config(text="Viento: -- km/h")
-            self._humidity_label.config(text="Humedad: --%")
-            self._fresh_dot.config(fg=ERROR)
-            self._fresh_label.config(text="")
-            return
+        t = self._art_text
+        t.config(state='normal')
+        t.delete('1.0', 'end')
 
-        code = data.get('weather_code', 113)
-        wind_dir = data.get('wind_dir', '')
-        arrow = WIND_ARROWS.get(wind_dir, '')
+        art = data.get('art_text')
+        if art:
+            for segment, fg, bold in _parse_ansi(art):
+                t.insert('end', segment, self._get_tag(fg, bold))
+            tag = 'body'
+        elif data.get('error'):
+            t.insert('end', 'Sin datos de tiempo', 'error')
+            tag = 'error'
+        else:
+            t.insert('end', 'Cargando...', 'loading')
+            tag = 'loading'
 
-        self._icon_label.config(text=_weather_icon(code), fg=ACCENT_CLOCK)
-        self._temp_label.config(text=f"{data['temp_c']}°C", fg=TEXT_PRIMARY)
-        self._feels_label.config(text=f"Sensacion: {data['feels_like_c']}°C")
-        self._desc_label.config(text=data['description'] or "")
-        self._wind_arrow.config(text=arrow)
-        wind_dir_str = f" ({wind_dir})" if wind_dir and wind_dir != '--' else ""
-        self._wind_label.config(text=f"Viento: {data['wind_kmh']} km/h{wind_dir_str}")
-        self._humidity_label.config(text=f"Humedad: {data['humidity']}%")
+        t.config(state='disabled')
 
-        ts = data['timestamp']
-        color = freshness_color(ts, 1800)
-        self._fresh_dot.config(fg=color)
-        self._fresh_label.config(
-            text=f"Actualizado hace {time_ago(ts)}" if ts else ""
-        )
+        ts = data.get('timestamp')
+        if ts:
+            color = freshness_color(ts, 1800)
+            self._fresh_dot.config(fg=color)
+            self._fresh_label.config(text=f'Actualizado hace {time_ago(ts)}')
+        else:
+            self._fresh_dot.config(fg=ERROR if tag == 'error' else TEXT_SECONDARY)
+            self._fresh_label.config(text='')
