@@ -5,7 +5,6 @@ import logging
 from ui.theme import BG_GLOBAL, BG_PANEL, BORDER
 from ui.widgets.top_bar import TopBar
 from ui.widgets.market_panel import MarketPanel
-from ui.widgets.news_panel import NewsPanel
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 class App(tk.Tk):
     """Ventana principal: barra superior + mercados + noticias, fullscreen cross-platform."""
 
-    def __init__(self, config, cmc_service, market_service, weather_service, rss_service):
+    def __init__(self, config, cmc_service, market_service, weather_service):
         super().__init__()
         self._cfg = config
         display     = config.get('display', {})
@@ -51,10 +50,9 @@ class App(tk.Tk):
 
         # 1 columna ancho completo
         self.grid_columnconfigure(0, weight=1)
-        # Filas: top_bar 5%, market 75%, news 20%
+        # Filas: top_bar 5%, market 95%
         self.grid_rowconfigure(0, weight=0, minsize=int(sh * 0.05))
-        self.grid_rowconfigure(1, weight=8, minsize=int(sh * 0.75))
-        self.grid_rowconfigure(2, weight=1, minsize=int(sh * 0.20))
+        self.grid_rowconfigure(1, weight=1, minsize=int(sh * 0.95))
 
         # --- Fila 0: Barra superior (hora + fecha + tiempo) ---
         self.top_bar = TopBar(self, weather_service, bg='#000000')
@@ -67,16 +65,7 @@ class App(tk.Tk):
             highlightbackground=BORDER,
             highlightthickness=1,
         )
-        self.market_panel.grid(row=1, column=0, sticky='nsew', pady=(1, 1))
-
-        # --- Fila 2: Noticias RSS ---
-        self.news_panel = NewsPanel(
-            self, rss_service,
-            bg=BG_PANEL,
-            highlightbackground=BORDER,
-            highlightthickness=1,
-        )
-        self.news_panel.grid(row=2, column=0, sticky='nsew', pady=(1, 0))
+        self.market_panel.grid(row=1, column=0, sticky='nsew', pady=(1, 0))
 
         # Teclas de debug (solo desarrollo)
         self.bind('<Escape>', lambda e: self.destroy())

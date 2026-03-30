@@ -135,7 +135,6 @@ def main():
     from services.coinmarketcap import CoinMarketCapService
     from services.market_data import MarketDataService
     from services.weather import WeatherService
-    from services.rss import RSSService
 
     cmc_service = CoinMarketCapService(
         api_key=cmc_key,
@@ -150,19 +149,15 @@ def main():
         city="Barcelona",
         refresh_interval=refresh.get('weather', 1800),
     )
-    rss_service = RSSService(
-        refresh_interval=refresh.get('news', 1800),
-    )
 
     cmc_service.start()
     market_service.start()
     weather_service.start()
-    rss_service.start()
     logger.info("Servicios de datos iniciados")
 
     # 5. Arrancar UI (bloquea hasta que se cierre la ventana)
     from ui.app import App
-    app = App(config, cmc_service, market_service, weather_service, rss_service)
+    app = App(config, cmc_service, market_service, weather_service)
     logger.info("Entrando en mainloop de Tkinter")
     app.mainloop()
     logger.info("Aplicacion cerrada")
