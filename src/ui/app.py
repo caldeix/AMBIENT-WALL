@@ -3,20 +3,20 @@ import platform
 import logging
 
 from ui.theme import BG_GLOBAL, BG_PANEL, BORDER
+from ui.widgets.top_bar import TopBar
 from ui.widgets.market_panel import MarketPanel
 from ui.widgets.news_panel import NewsPanel
-from ui.widgets.clock_weather_panel import ClockWeatherPanel
 
 logger = logging.getLogger(__name__)
 
 
 class App(tk.Tk):
-    """Ventana principal: grid 2+1 (2 cajones arriba + noticias abajo), fullscreen cross-platform."""
+    """Ventana principal: barra superior + mercados + noticias, fullscreen cross-platform."""
 
     def __init__(self, config, cmc_service, market_service, weather_service, rss_service):
         super().__init__()
         self._cfg = config
-        display   = config.get('display', {})
+        display     = config.get('display', {})
         fullscreen  = display.get('fullscreen', True)
         hide_cursor = display.get('hide_cursor', True)
 
@@ -25,7 +25,7 @@ class App(tk.Tk):
         self.resizable(False, False)
 
         # Resolución simulada (para desarrollo cross-platform)
-        sim_res = display.get('sim_resolution')  # e.g. "1024x600"
+        sim_res = display.get('sim_resolution')  # e.g. "1024x768"
         if sim_res:
             sim_w, sim_h = (int(x) for x in sim_res.split('x'))
         else:
@@ -43,46 +43,40 @@ class App(tk.Tk):
         if hide_cursor:
             self.config(cursor='none')
 
-        # Forzar layout con minsize en píxeles para que funcione igual en Linux y Windows
-        # weight solo distribuye espacio "extra"; minsize garantiza la proporción real
+        # Proporciones del layout sobre la resolución efectiva
         self.update_idletasks()
         sw = sim_w or self.winfo_screenwidth()
         sh = sim_h or self.winfo_screenheight()
         logger.info(f"Resolución efectiva para layout: {sw}x{sh}")
 
-        # Grid 2+1: col 0 (tiempo) 75%, col 1 (crypto) 25%
-        self.grid_columnconfigure(0, weight=3, minsize=int(sw * 0.65))
-        self.grid_columnconfigure(1, weight=1, minsize=int(sw * 0.35))
-        # Filas: arriba 88%, noticias 12%
-        self.grid_rowconfigure(0, weight=8, minsize=int(sh * 0.80))
-        self.grid_rowconfigure(1, weight=1, minsize=int(sh * 0.20))
+        # 1 columna ancho completo
+        self.grid_columnconfigure(0, weight=1)
+        # Filas: top_bar 5%, market 75%, news 20%
+        self.grid_rowconfigure(0, weight=0, minsize=int(sh * 0.05))
+        self.grid_rowconfigure(1, weight=8, minsize=int(sh * 0.75))
+        self.grid_rowconfigure(2, weight=1, minsize=int(sh * 0.20))
 
-        # --- Cajon 1: Reloj + Tiempo (arriba-izquierda) ---
-        self.clock_panel = ClockWeatherPanel(
-            self, weather_service,
-            bg=BG_PANEL,
-            highlightbackground=BORDER,
-            highlightthickness=1,
-        )
-        self.clock_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 1), pady=(0, 1))
+        # --- Fila 0: Barra superior (hora + fecha + tiempo) ---
+        self.top_bar = TopBar(self, weather_service, bg='#000000')
+        self.top_bar.grid(row=0, column=0, sticky='nsew')
 
-        # --- Cajon 2: Mercados / Cryptos (arriba-derecha) ---
+        # --- Fila 1: Mercados / Cryptos ---
         self.market_panel = MarketPanel(
             self, cmc_service, market_service,
             bg=BG_PANEL,
             highlightbackground=BORDER,
             highlightthickness=1,
         )
-        self.market_panel.grid(row=0, column=1, sticky='nsew', padx=(1, 0), pady=(0, 1))
+        self.market_panel.grid(row=1, column=0, sticky='nsew', pady=(1, 1))
 
-        # --- Cajon 3: Noticias RSS (abajo, ancho completo) ---
+        # --- Fila 2: Noticias RSS ---
         self.news_panel = NewsPanel(
             self, rss_service,
             bg=BG_PANEL,
             highlightbackground=BORDER,
             highlightthickness=1,
         )
-        self.news_panel.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(1, 0))
+        self.news_panel.grid(row=2, column=0, sticky='nsew', pady=(1, 0))
 
         # Teclas de debug (solo desarrollo)
         self.bind('<Escape>', lambda e: self.destroy())
