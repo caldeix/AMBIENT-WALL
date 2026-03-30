@@ -3,9 +3,8 @@ import datetime
 
 from ui.theme import (
     BG_PANEL, BORDER, TEXT_PRIMARY, TEXT_SECONDARY,
-    ACCENT_MARKET, ERROR, WARNING,
-    FONT_TITLE, FONT_BTC, FONT_CHANGE, FONT_SECONDARY,
-    FONT_LABEL, FONT_TIMESTAMP,
+    ACCENT_MARKET, ERROR, WARNING, POSITIVE, NEGATIVE,
+    FONT_BTC, FONT_CHANGE, FONT_TIMESTAMP,
 )
 from utils.formatting import (
     fmt_usd, fmt_change, fmt_gold, fmt_sp500,
@@ -20,442 +19,327 @@ try:
 except ImportError:
     HAS_MPL = False
 
+# Fuentes bloques de gráfico (fila superior x2)
+_F_BLOCK_TICKER = ('Helvetica', 11, 'normal')
+_F_BLOCK_PRICE  = ('Courier',   18, 'bold')
+_F_BLOCK_CHANGE = ('Helvetica', 12, 'normal')
+
+# Fuentes rejilla altcoins (+15% sobre los valores originales de 10/12pt)
+_F_ALT_TICKER = ('Helvetica', 12, 'normal')   # era 10
+_F_ALT_VALUE  = ('Helvetica', 14, 'normal')   # era 12
+_F_ALT_EUR    = ('Helvetica', 11, 'normal')   # era 10
+
+
+def _pct_change(history):
+    """Calcula % de cambio entre el penúltimo y último valor del historial."""
+    if history and len(history) >= 2:
+        prev, last = history[-2], history[-1]
+        if prev and prev != 0:
+            return (last - prev) / prev * 100
+    return None
+
 
 def _is_nyse_open():
-    """Comprueba si el mercado NYSE esta abierto segun hora local (Barcelona)."""
     now = datetime.datetime.now()
     if now.weekday() >= 5:
         return False
-    # NYSE abre 15:30-22:00 CEST (UTC+2, verano) o 14:30-21:00 CET (UTC+1, invierno)
-    # Usamos el offset real del sistema (que en Barcelona ya esta ajustado)
     import time as _time
     utc_offset_h = -(_time.timezone if not _time.daylight else _time.altzone) / 3600
-    # NYSE abre 9:30 ET (UTC-5 EST / UTC-4 EDT)
-    # Apertura en hora local = 14:30 CET / 15:30 CEST
-    nyse_open_local  = 9.5  + (utc_offset_h + 5)   # 9:30 ET -> hora local
-    nyse_close_local = 16.0 + (utc_offset_h + 5)   # 16:00 ET -> hora local
+    nyse_open_local  = 9.5  + (utc_offset_h + 5)
+    nyse_close_local = 16.0 + (utc_offset_h + 5)
     current_h = now.hour + now.minute / 60
     return nyse_open_local <= current_h <= nyse_close_local
 
 
 class MarketPanel(tk.Frame):
-    """Cajon 1 — Mercados: BTC (precio + sparkline 7d), Oro, S&P500."""
+    """Layout:
+      Fila 1: [BTC  gráfico] [ETH  gráfico] [ORO  gráfico]
+      Fila 2: [S&P  gráfico] [PLATA gráfico] [IBEX gráfico]
+      Fila 3: rejilla 3 columnas — altcoins restantes
+    """
 
     def __init__(self, parent, cmc_service, market_service, **kwargs):
         kwargs.setdefault('bg', BG_PANEL)
         super().__init__(parent, **kwargs)
-        self._cmc     = cmc_service
-        self._market  = market_service
-        self._bg      = self.cget('bg')
-        self._fig     = None
-        self._ax      = None
-        self._canvas  = None
+        self._cmc    = cmc_service
+        self._market = market_service
+        self._bg     = self.cget('bg')
+        self._charts = {}   # ticker -> {fig, ax, canvas, price, change, date_start, date_end}
         self._build_ui()
         self._poll()
+
+    # ------------------------------------------------------------------
+    # Helpers de construcción
+    # ------------------------------------------------------------------
+
+    def _make_chart_block(self, parent, ticker, show_freshness=False):
+        """Crea un bloque con ticker/precio/cambio + sparkline. Devuelve refs dict."""
+        bg = self._bg
+        block = tk.Frame(parent, bg=bg,
+                         highlightbackground=BORDER, highlightthickness=1)
+
+        header = tk.Frame(block, bg=bg)
+        header.pack(fill='x', padx=8, pady=(6, 2))
+
+        tk.Label(header, text=ticker, font=_F_BLOCK_TICKER,
+                 fg=TEXT_SECONDARY, bg=bg).pack(side='left', padx=(0, 8))
+
+        price_lbl = tk.Label(header, text="--", font=_F_BLOCK_PRICE,
+                             fg=TEXT_PRIMARY, bg=bg)
+        price_lbl.pack(side='left')
+
+        change_lbl = tk.Label(header, text="", font=_F_BLOCK_CHANGE,
+                              fg=TEXT_SECONDARY, bg=bg)
+        change_lbl.pack(side='left', padx=(8, 0))
+
+        refs = {
+            'price': price_lbl, 'change': change_lbl,
+            'fig': None, 'ax': None, 'canvas': None,
+            'date_start': None, 'date_end': None,
+        }
+
+        if show_freshness:
+            fresh_dot = tk.Label(header, text="●", font=('Courier', 9),
+                                 fg=TEXT_SECONDARY, bg=bg)
+            fresh_dot.pack(side='right', padx=(0, 3))
+            fresh_lbl = tk.Label(header, text="", font=FONT_TIMESTAMP,
+                                 fg=TEXT_SECONDARY, bg=bg)
+            fresh_lbl.pack(side='right')
+            refs['fresh_dot'] = fresh_dot
+            refs['fresh_lbl'] = fresh_lbl
+
+        if HAS_MPL:
+            fig = Figure(figsize=(3.2, 1.2), dpi=90)
+            fig.patch.set_facecolor(BG_PANEL)
+            ax = fig.add_subplot(111)
+            ax.set_facecolor(BG_PANEL)
+            fig.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.05)
+
+            canvas = FigureCanvasTkAgg(fig, master=block)
+            widget = canvas.get_tk_widget()
+            widget.configure(bg=BG_PANEL, highlightthickness=0, bd=0)
+            widget.pack(fill='x', padx=4)
+
+            date_row = tk.Frame(block, bg=bg)
+            date_row.pack(fill='x', padx=8, pady=(0, 4))
+            date_start = tk.Label(date_row, text="", font=FONT_TIMESTAMP,
+                                  fg=TEXT_SECONDARY, bg=bg)
+            date_start.pack(side='left')
+            date_end = tk.Label(date_row, text="", font=FONT_TIMESTAMP,
+                                fg=TEXT_SECONDARY, bg=bg)
+            date_end.pack(side='right')
+
+            refs.update({
+                'fig': fig, 'ax': ax, 'canvas': canvas,
+                'date_start': date_start, 'date_end': date_end,
+            })
+        else:
+            tk.Label(block, text="[matplotlib no instalado]",
+                     font=FONT_TIMESTAMP, fg=WARNING, bg=bg).pack(pady=4)
+
+        return block, refs
+
+    def _make_chart_row(self, tickers):
+        """Crea un Frame horizontal con 3 bloques de gráfico."""
+        bg = self._bg
+        row = tk.Frame(self, bg=bg)
+        row.pack(fill='both', expand=True)
+        for i in range(3):
+            row.grid_columnconfigure(i, weight=1)
+
+        for col, ticker in enumerate(tickers):
+            show_fresh = (ticker == 'BTC')
+            block, refs = self._make_chart_block(row, ticker, show_freshness=show_fresh)
+            block.grid(row=0, column=col, sticky='nsew', padx=(0 if col == 0 else 1, 0))
+            self._charts[ticker] = refs
+
+    def _make_alt_row(self, parent, row, col, ticker):
+        """Crea una fila de altcoin en la rejilla inferior."""
+        bg = self._bg
+        cell = tk.Frame(parent, bg=bg)
+        cell.grid(row=row, column=col, sticky='nsew', padx=12, pady=5)
+        tk.Label(cell, text=ticker, font=_F_ALT_TICKER, fg=TEXT_SECONDARY,
+                 bg=bg, width=7, anchor='w').pack(side='left')
+        price_lbl = tk.Label(cell, text="--", font=_F_ALT_VALUE,
+                             fg=TEXT_PRIMARY, bg=bg)
+        price_lbl.pack(side='left', padx=(6, 0))
+        eur_lbl = tk.Label(cell, text="", font=_F_ALT_EUR,
+                           fg=TEXT_SECONDARY, bg=bg)
+        eur_lbl.pack(side='left', padx=(4, 0))
+        return price_lbl, eur_lbl
 
     # ------------------------------------------------------------------
     # Layout
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        bg = self._bg
+        # Fila 1: BTC | ETH | ORO
+        self._make_chart_row(['BTC', 'ETH', 'ORO'])
 
-        # --- Header ---
-        header = tk.Frame(self, bg=bg, height=32)
-        header.pack(fill='x', padx=10, pady=(8, 4))
-        header.pack_propagate(False)
+        tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
 
-        tk.Label(
-            header, text="MERCADOS",
-            font=FONT_TITLE, fg=ACCENT_MARKET, bg=bg,
-        ).pack(side='left', pady=4)
+        # Fila 2: S&P500 | PLATA | IBEX35
+        self._make_chart_row(['S&P500', 'PLATA', 'IBEX35'])
 
-        self._fresh_dot = tk.Label(
-            header, text="●", font=('Courier', 10),
-            fg=TEXT_SECONDARY, bg=bg,
-        )
-        self._fresh_dot.pack(side='right', padx=(0, 6))
+        tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
 
-        self._fresh_label = tk.Label(
-            header, text="", font=FONT_TIMESTAMP,
-            fg=TEXT_SECONDARY, bg=bg,
-        )
-        self._fresh_label.pack(side='right')
+        # Fila 3: rejilla altcoins 4x3
+        grid = tk.Frame(self, bg=self._bg)
+        grid.pack(fill='both', expand=True, padx=4, pady=(6, 4))
+        for c in range(3):
+            grid.grid_columnconfigure(c, weight=1)
 
-        # --- Separador ---
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=8)
+        self._sol_lbl,    self._sol_eur    = self._make_alt_row(grid, 0, 0, "SOL")
+        self._wif_lbl,    self._wif_eur    = self._make_alt_row(grid, 1, 0, "WIF")
+        self._dot_lbl,    self._dot_eur    = self._make_alt_row(grid, 2, 0, "DOT")
+        self._rail_lbl,   self._rail_eur   = self._make_alt_row(grid, 3, 0, "RAIL")
 
-        # --- Fila BTC ---
-        btc_row = tk.Frame(self, bg=bg)
-        btc_row.pack(fill='x', padx=12, pady=(10, 2))
+        self._ali_lbl,    self._ali_eur    = self._make_alt_row(grid, 0, 1, "ALI")
+        self._jup_lbl,    self._jup_eur    = self._make_alt_row(grid, 1, 1, "JUP")
+        self._strk_lbl,   self._strk_eur   = self._make_alt_row(grid, 2, 1, "STRK")
+        self._rose_lbl,   self._rose_eur   = self._make_alt_row(grid, 3, 1, "ROSE")
 
-        tk.Label(
-            btc_row, text="BTC",
-            font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg,
-        ).pack(side='left', padx=(0, 8))
-
-        self._btc_price = tk.Label(
-            btc_row, text="$--",
-            font=FONT_BTC, fg=TEXT_PRIMARY, bg=bg,
-        )
-        self._btc_price.pack(side='left')
-
-        self._btc_change = tk.Label(
-            btc_row, text="",
-            font=FONT_CHANGE, fg=TEXT_SECONDARY, bg=bg,
-        )
-        self._btc_change.pack(side='left', padx=(12, 0))
-
-        # --- Sparkline matplotlib ---
-        if HAS_MPL:
-            chart_outer = tk.Frame(self, bg=bg)
-            chart_outer.pack(fill='x', padx=8, pady=(4, 0))
-
-            self._fig = Figure(figsize=(4.7, 0.75), dpi=100)
-            self._fig.patch.set_facecolor(BG_PANEL)
-            self._ax = self._fig.add_subplot(111)
-            self._ax.set_facecolor(BG_PANEL)
-            self._fig.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.05)
-
-            self._canvas = FigureCanvasTkAgg(self._fig, master=chart_outer)
-            widget = self._canvas.get_tk_widget()
-            widget.configure(bg=BG_PANEL, highlightthickness=0, bd=0)
-            widget.pack(fill='x')
-
-            # Etiquetas de fecha debajo del grafico
-            date_row = tk.Frame(self, bg=bg)
-            date_row.pack(fill='x', padx=14)
-            self._date_start = tk.Label(
-                date_row, text="", font=FONT_TIMESTAMP,
-                fg=TEXT_SECONDARY, bg=bg,
-            )
-            self._date_start.pack(side='left')
-            self._date_end = tk.Label(
-                date_row, text="", font=FONT_TIMESTAMP,
-                fg=TEXT_SECONDARY, bg=bg,
-            )
-            self._date_end.pack(side='right')
-        else:
-            self._date_start = None
-            self._date_end = None
-            tk.Label(
-                self, text="[instalar matplotlib para el grafico]",
-                font=FONT_TIMESTAMP, fg=WARNING, bg=bg,
-            ).pack(pady=8)
-
-        # --- Separador cripto principal / secundaria ---
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=8, pady=(3, 0))
-
-        # --- ETH ---
-        eth_row = tk.Frame(self, bg=bg)
-        eth_row.pack(fill='x', padx=12, pady=(3, 1))
-        tk.Label(eth_row, text="ETH", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._eth_eur = tk.Label(eth_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._eth_eur.pack(side='right', padx=(0, 6))
-        self._eth_label = tk.Label(eth_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._eth_label.pack(side='left')
-
-        # --- SOL ---
-        sol_row = tk.Frame(self, bg=bg)
-        sol_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(sol_row, text="SOL", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._sol_eur = tk.Label(sol_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._sol_eur.pack(side='right', padx=(0, 6))
-        self._sol_label = tk.Label(sol_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._sol_label.pack(side='left')
-
-        # --- XRP ---
-        xrp_row = tk.Frame(self, bg=bg)
-        xrp_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(xrp_row, text="XRP", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._xrp_eur = tk.Label(xrp_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._xrp_eur.pack(side='right', padx=(0, 6))
-        self._xrp_label = tk.Label(xrp_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._xrp_label.pack(side='left')
-
-        # --- DOT ---
-        dot_row = tk.Frame(self, bg=bg)
-        dot_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(dot_row, text="DOT", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._dot_eur = tk.Label(dot_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._dot_eur.pack(side='right', padx=(0, 6))
-        self._dot_label = tk.Label(dot_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._dot_label.pack(side='left')
-
-        # --- POPCAT ---
-        popcat_row = tk.Frame(self, bg=bg)
-        popcat_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(popcat_row, text="POPCAT", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._popcat_eur = tk.Label(popcat_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._popcat_eur.pack(side='right', padx=(0, 6))
-        self._popcat_label = tk.Label(popcat_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._popcat_label.pack(side='left')
-
-        # --- WIF ---
-        wif_row = tk.Frame(self, bg=bg)
-        wif_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(wif_row, text="WIF", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._wif_eur = tk.Label(wif_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._wif_eur.pack(side='right', padx=(0, 6))
-        self._wif_label = tk.Label(wif_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._wif_label.pack(side='left')
-
-        # --- ALI ---
-        ali_row = tk.Frame(self, bg=bg)
-        ali_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(ali_row, text="ALI", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._ali_eur = tk.Label(ali_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._ali_eur.pack(side='right', padx=(0, 6))
-        self._ali_label = tk.Label(ali_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._ali_label.pack(side='left')
-
-        # --- AURA ---
-        aura_row = tk.Frame(self, bg=bg)
-        aura_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(aura_row, text="AURA", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._aura_eur = tk.Label(aura_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._aura_eur.pack(side='right', padx=(0, 6))
-        self._aura_label = tk.Label(aura_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._aura_label.pack(side='left')
-
-        # --- Separador cripto / mercados tradicionales ---
-        tk.Frame(self, bg=BORDER, height=1).pack(fill='x', padx=8, pady=(3, 0))
-
-        # --- ORO ---
-        gold_row = tk.Frame(self, bg=bg)
-        gold_row.pack(fill='x', padx=12, pady=(3, 1))
-        tk.Label(gold_row, text="ORO", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._gold_eur = tk.Label(gold_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._gold_eur.pack(side='right', padx=(0, 6))
-        self._gold_label = tk.Label(gold_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._gold_label.pack(side='left')
-
-        # --- PLATA ---
-        silver_row = tk.Frame(self, bg=bg)
-        silver_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(silver_row, text="PLATA", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._silver_eur = tk.Label(silver_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._silver_eur.pack(side='right', padx=(0, 6))
-        self._silver_label = tk.Label(silver_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._silver_label.pack(side='left')
-
-        # --- S&P500 ---
-        sp_row = tk.Frame(self, bg=bg)
-        sp_row.pack(fill='x', padx=12, pady=(2, 1))
-        tk.Label(sp_row, text="S&P500", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._sp_status = tk.Label(sp_row, text="", font=FONT_TIMESTAMP, fg=TEXT_SECONDARY, bg=bg)
-        self._sp_status.pack(side='right')
-        self._sp_eur = tk.Label(sp_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._sp_eur.pack(side='right', padx=(0, 6))
-        self._sp_label = tk.Label(sp_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._sp_label.pack(side='left')
-
-        # --- IBEX35 ---
-        ibex_row = tk.Frame(self, bg=bg)
-        ibex_row.pack(fill='x', padx=12, pady=(2, 4))
-        tk.Label(ibex_row, text="IBEX35", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg, width=7, anchor='w').pack(side='left')
-        self._ibex_eur = tk.Label(ibex_row, text="", font=FONT_LABEL, fg=TEXT_SECONDARY, bg=bg)
-        self._ibex_eur.pack(side='right', padx=(0, 6))
-        self._ibex_label = tk.Label(ibex_row, text="--", font=FONT_SECONDARY, fg=TEXT_PRIMARY, bg=bg)
-        self._ibex_label.pack(side='left')
+        self._popcat_lbl, self._popcat_eur = self._make_alt_row(grid, 0, 2, "POPCAT")
+        self._aura_lbl,   self._aura_eur   = self._make_alt_row(grid, 1, 2, "AURA")
+        self._gpu_lbl,    self._gpu_eur    = self._make_alt_row(grid, 2, 2, "GPU")
+        self._hsuite_lbl, self._hsuite_eur = self._make_alt_row(grid, 3, 2, "HSUITE")
 
     # ------------------------------------------------------------------
-    # Polling y actualizacion (hilo principal via self.after)
+    # Polling y actualización
     # ------------------------------------------------------------------
 
     def _poll(self):
         self._update_display()
         self.after(5_000, self._poll)
 
-    def _update_display(self):
-        cmc    = self._cmc.get_data()
-        market = self._market.get_data()
-
-        # --- BTC precio + variacion ---
-        if cmc['btc_price'] is not None:
-            self._btc_price.config(text=fmt_usd(cmc['btc_price']), fg=TEXT_PRIMARY)
-            change_text, change_color = fmt_change(cmc['btc_change_24h'])
-            self._btc_change.config(text=change_text, fg=change_color)
-        else:
-            self._btc_price.config(text="Dato no disponible", fg=ERROR)
-            self._btc_change.config(text="")
-
-        # Indicador de frescura (basado en timestamp CMC)
-        ts = cmc.get('timestamp')
-        dot_color = freshness_color(ts, 300)
-        self._fresh_dot.config(fg=dot_color)
-        if ts:
-            self._fresh_label.config(
-                text=f"Actualizado hace {time_ago(ts)}"
-            )
-
-        # --- Sparkline ---
-        if self._fig is not None:
-            self._update_chart(
-                market.get('btc_history'),
-                market.get('btc_history_dates'),
-            )
-
-        eurusd = market.get('eurusd_rate')
-
-        # --- ETH ---
-        eth = cmc.get('eth_price')
-        if eth is not None:
-            self._eth_label.config(text=fmt_usd(eth), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(eth, eurusd)
-            self._eth_eur.config(text=fmt_eur(eur) if eur else "")
-        else:
-            self._eth_label.config(text="--", fg=TEXT_SECONDARY)
-            self._eth_eur.config(text="")
-
-        # --- SOL ---
-        sol = cmc.get('sol_price')
-        if sol is not None:
-            self._sol_label.config(text=fmt_usd(sol), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(sol, eurusd)
-            self._sol_eur.config(text=fmt_eur(eur) if eur else "")
-        else:
-            self._sol_label.config(text="--", fg=TEXT_SECONDARY)
-            self._sol_eur.config(text="")
-
-        # --- XRP ---
-        xrp = cmc.get('xrp_price')
-        if xrp is not None:
-            self._xrp_label.config(text=fmt_usd(xrp), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(xrp, eurusd)
-            self._xrp_eur.config(text=fmt_eur(eur) if eur else "")
-        else:
-            self._xrp_label.config(text="--", fg=TEXT_SECONDARY)
-            self._xrp_eur.config(text="")
-
-        # --- DOT ---
-        dot = cmc.get('dot_price')
-        if dot is not None:
-            self._dot_label.config(text=fmt_usd(dot), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(dot, eurusd)
-            self._dot_eur.config(text=fmt_eur(eur) if eur else "")
-        else:
-            self._dot_label.config(text="--", fg=TEXT_SECONDARY)
-            self._dot_eur.config(text="")
-
-        # --- POPCAT ---
-        popcat = cmc.get('popcat_price')
-        if popcat is not None:
-            self._popcat_label.config(text=fmt_usd(popcat, 4), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(popcat, eurusd)
-            self._popcat_eur.config(text=fmt_eur(eur, 4) if eur else "")
-        else:
-            self._popcat_label.config(text="--", fg=TEXT_SECONDARY)
-            self._popcat_eur.config(text="")
-
-        # --- WIF ---
-        wif = cmc.get('wif_price')
-        if wif is not None:
-            self._wif_label.config(text=fmt_usd(wif, 4), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(wif, eurusd)
-            self._wif_eur.config(text=fmt_eur(eur, 4) if eur else "")
-        else:
-            self._wif_label.config(text="--", fg=TEXT_SECONDARY)
-            self._wif_eur.config(text="")
-
-        # --- ALI ---
-        ali = cmc.get('ali_price')
-        if ali is not None:
-            self._ali_label.config(text=fmt_usd(ali, 4), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(ali, eurusd)
-            self._ali_eur.config(text=fmt_eur(eur, 4) if eur else "")
-        else:
-            self._ali_label.config(text="--", fg=TEXT_SECONDARY)
-            self._ali_eur.config(text="")
-
-        # --- AURA ---
-        aura = cmc.get('aura_price')
-        if aura is not None:
-            self._aura_label.config(text=fmt_usd(aura, 4), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(aura, eurusd)
-            self._aura_eur.config(text=fmt_eur(eur, 4) if eur else "")
-        else:
-            self._aura_label.config(text="--", fg=TEXT_SECONDARY)
-            self._aura_eur.config(text="")
-
-        # --- Oro ---
-        gold = market.get('gold_price')
-        if gold is not None:
-            self._gold_label.config(text=fmt_gold(gold), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(gold, eurusd)
-            self._gold_eur.config(text=fmt_eur(eur) + " /oz" if eur else "")
-        else:
-            self._gold_label.config(text="Dato no disponible", fg=ERROR)
-            self._gold_eur.config(text="")
-
-        # --- Plata ---
-        silver = market.get('silver_price')
-        if silver is not None:
-            self._silver_label.config(text=fmt_gold(silver), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(silver, eurusd)
-            self._silver_eur.config(text=fmt_eur(eur) + " /oz" if eur else "")
-        else:
-            self._silver_label.config(text="Dato no disponible", fg=ERROR)
-            self._silver_eur.config(text="")
-
-        # --- S&P 500 ---
-        sp = market.get('sp500_price')
-        if sp is not None:
-            self._sp_label.config(text=fmt_sp500(sp), fg=TEXT_PRIMARY)
-            eur = usd_to_eur(sp, eurusd)
-            self._sp_eur.config(text=fmt_eur(eur, 0) + " pts" if eur else "")
-            self._sp_status.config(
-                text="cerrado" if not _is_nyse_open() else "",
-                fg=TEXT_SECONDARY,
-            )
-        else:
-            self._sp_label.config(text="Dato no disponible", fg=ERROR)
-            self._sp_eur.config(text="")
-            self._sp_status.config(text="")
-
-        # --- IBEX35 ---
-        ibex = market.get('ibex_price')
-        if ibex is not None:
-            self._ibex_label.config(text=fmt_ibex(ibex), fg=TEXT_PRIMARY)
-            self._ibex_eur.config(text=fmt_eur(ibex, 0) + " pts")
-        else:
-            self._ibex_label.config(text="Dato no disponible", fg=ERROR)
-            self._ibex_eur.config(text="")
-
-    def _update_chart(self, prices, dates):
-        self._ax.clear()
-        self._ax.set_facecolor(BG_PANEL)
-        self._ax.axis('off')
+    def _draw_chart(self, ticker, prices, dates):
+        refs = self._charts.get(ticker)
+        if refs is None or refs['ax'] is None:
+            return
+        ax = refs['ax']
+        ax.clear()
+        ax.set_facecolor(BG_PANEL)
+        ax.axis('off')
 
         if prices and len(prices) > 2:
             x = list(range(len(prices)))
-            mn = min(prices)
-            mx = max(prices)
-            padding = (mx - mn) * 0.12 if mx != mn else 1.0
-
-            self._ax.set_ylim(mn - padding, mx + padding)
-            self._ax.plot(
-                x, prices,
-                color=ACCENT_MARKET, linewidth=1.5,
-                solid_capstyle='round', solid_joinstyle='round',
-            )
-            self._ax.fill_between(
-                x, prices, mn - padding,
-                alpha=0.15, color=ACCENT_MARKET,
-            )
+            mn, mx = min(prices), max(prices)
+            pad = (mx - mn) * 0.12 if mx != mn else 1.0
+            ax.set_ylim(mn - pad, mx + pad)
+            ax.plot(x, prices, color=ACCENT_MARKET, linewidth=1.5,
+                    solid_capstyle='round', solid_joinstyle='round')
+            ax.fill_between(x, prices, mn - pad, alpha=0.15, color=ACCENT_MARKET)
         else:
-            # Sin datos: linea gris horizontal + texto
-            self._ax.axhline(y=0.5, color=TEXT_SECONDARY, linewidth=1, alpha=0.4)
-            self._ax.text(
-                0.5, 0.5, 'Sin datos',
-                transform=self._ax.transAxes,
-                ha='center', va='center',
-                color=TEXT_SECONDARY, fontsize=9,
-            )
+            ax.axhline(y=0.5, color=TEXT_SECONDARY, linewidth=1, alpha=0.4)
+            ax.text(0.5, 0.5, 'Sin datos', transform=ax.transAxes,
+                    ha='center', va='center', color=TEXT_SECONDARY, fontsize=9)
 
-        self._fig.subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.05)
-        self._canvas.draw_idle()
+        refs['fig'].subplots_adjust(left=0.01, right=0.99, top=0.95, bottom=0.05)
+        refs['canvas'].draw_idle()
 
-        if self._date_start and dates:
-            self._date_start.config(text=dates[0] if dates[0] else "")
-            self._date_end.config(text=dates[1] if dates[1] else "")
+        if dates and refs['date_start']:
+            refs['date_start'].config(text=dates[0] or "")
+            refs['date_end'].config(text=dates[1] or "")
+
+    def _set_price(self, ticker, price_text, change_pct=None):
+        refs = self._charts.get(ticker)
+        if refs is None:
+            return
+        refs['price'].config(text=price_text, fg=TEXT_PRIMARY if price_text != "--" else ERROR)
+        if change_pct is not None:
+            sign = "▲" if change_pct >= 0 else "▼"
+            color = POSITIVE if change_pct >= 0 else NEGATIVE
+            refs['change'].config(text=f"{sign}{abs(change_pct):.2f}%", fg=color)
+        else:
+            refs['change'].config(text="")
+
+    def _update_coin(self, price_lbl, eur_lbl, price_val, eurusd, decimals=2):
+        if price_val is not None:
+            price_lbl.config(text=fmt_usd(price_val, decimals), fg=TEXT_PRIMARY)
+            eur = usd_to_eur(price_val, eurusd)
+            eur_lbl.config(text=f"({fmt_eur(eur, decimals)})" if eur else "")
+        else:
+            price_lbl.config(text="--", fg=TEXT_SECONDARY)
+            eur_lbl.config(text="")
+
+    def _update_display(self):
+        cmc    = self._cmc.get_data()
+        market = self._market.get_data()
+        eurusd = market.get('eurusd_rate')
+
+        # --- BTC ---
+        btc_price = cmc.get('btc_price')
+        if btc_price is not None:
+            self._set_price('BTC', fmt_usd(btc_price), cmc.get('btc_change_24h'))
+        else:
+            self._set_price('BTC', "--")
+        self._draw_chart('BTC', market.get('btc_history'), market.get('btc_history_dates'))
+
+        # Frescura BTC
+        ts = cmc.get('timestamp')
+        refs_btc = self._charts['BTC']
+        if 'fresh_dot' in refs_btc:
+            refs_btc['fresh_dot'].config(fg=freshness_color(ts, 300))
+        if 'fresh_lbl' in refs_btc and ts:
+            refs_btc['fresh_lbl'].config(text=f"hace {time_ago(ts)}")
+
+        # --- ETH ---
+        eth_price = cmc.get('eth_price')
+        if eth_price is not None:
+            self._set_price('ETH', fmt_usd(eth_price), cmc.get('eth_change_24h'))
+        else:
+            self._set_price('ETH', "--")
+        self._draw_chart('ETH', market.get('eth_history'), market.get('eth_history_dates'))
+
+        # --- ORO ---
+        gold = market.get('gold_price')
+        gold_hist = market.get('gold_history')
+        if gold is not None:
+            eur = usd_to_eur(gold, eurusd)
+            price_str = f"{fmt_gold(gold)}" + (f"  {fmt_eur(eur)}/oz" if eur else "")
+            self._set_price('ORO', fmt_gold(gold), _pct_change(gold_hist))
+        else:
+            self._set_price('ORO', "--")
+        self._draw_chart('ORO', gold_hist, market.get('gold_history_dates'))
+
+        # --- S&P500 ---
+        sp = market.get('sp500_price')
+        sp_hist = market.get('sp500_history')
+        if sp is not None:
+            status = " cerrado" if not _is_nyse_open() else ""
+            self._set_price('S&P500', fmt_sp500(sp) + status, _pct_change(sp_hist))
+        else:
+            self._set_price('S&P500', "--")
+        self._draw_chart('S&P500', sp_hist, market.get('sp500_history_dates'))
+
+        # --- PLATA ---
+        silver = market.get('silver_price')
+        silver_hist = market.get('silver_history')
+        if silver is not None:
+            self._set_price('PLATA', fmt_gold(silver), _pct_change(silver_hist))
+        else:
+            self._set_price('PLATA', "--")
+        self._draw_chart('PLATA', silver_hist, market.get('silver_history_dates'))
+
+        # --- IBEX35 ---
+        ibex = market.get('ibex_price')
+        ibex_hist = market.get('ibex_history')
+        if ibex is not None:
+            self._set_price('IBEX35', fmt_ibex(ibex), _pct_change(ibex_hist))
+        else:
+            self._set_price('IBEX35', "--")
+        self._draw_chart('IBEX35', ibex_hist, market.get('ibex_history_dates'))
+
+        # --- Altcoins (rejilla) ---
+        self._update_coin(self._sol_lbl,    self._sol_eur,    cmc.get('sol_price'),    eurusd)
+        self._update_coin(self._wif_lbl,    self._wif_eur,    cmc.get('wif_price'),    eurusd, 4)
+        self._update_coin(self._dot_lbl,    self._dot_eur,    cmc.get('dot_price'),    eurusd)
+        self._update_coin(self._rail_lbl,   self._rail_eur,   cmc.get('rail_price'),   eurusd, 4)
+        self._update_coin(self._ali_lbl,    self._ali_eur,    cmc.get('ali_price'),    eurusd, 4)
+        self._update_coin(self._jup_lbl,    self._jup_eur,    cmc.get('jup_price'),    eurusd, 4)
+        self._update_coin(self._strk_lbl,   self._strk_eur,   cmc.get('strk_price'),   eurusd, 4)
+        self._update_coin(self._rose_lbl,   self._rose_eur,   cmc.get('rose_price'),   eurusd, 4)
+        self._update_coin(self._popcat_lbl, self._popcat_eur, cmc.get('popcat_price'), eurusd, 4)
+        self._update_coin(self._aura_lbl,   self._aura_eur,   cmc.get('aura_price'),   eurusd, 4)
+        self._update_coin(self._gpu_lbl,    self._gpu_eur,    cmc.get('gpu_price'),    eurusd, 4)
+        self._update_coin(self._hsuite_lbl, self._hsuite_eur, cmc.get('hsuite_price'), eurusd, 4)
