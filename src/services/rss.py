@@ -16,7 +16,7 @@ DEFAULT_FEEDS = [
     ('COINDESK',      'https://www.coindesk.com/arc/outboundfeeds/rss/'),
 ]
 
-MAX_ITEMS = 30
+MAX_ITEMS = 10
 
 
 def _parse_rss(content):

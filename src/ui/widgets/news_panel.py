@@ -7,8 +7,8 @@ from ui.theme import (
 )
 from utils.formatting import time_ago, freshness_color
 
-ITEMS_VISIBLE = 5
-ROTATE_MS     = 6_000   # ms entre rotaciones
+ITEMS_VISIBLE = 1
+ROTATE_MS     = 10_000   # ms entre rotaciones
 
 
 class NewsPanel(tk.Frame):

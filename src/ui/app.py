@@ -24,24 +24,38 @@ class App(tk.Tk):
         self.configure(bg=BG_GLOBAL)
         self.resizable(False, False)
 
+        # Resolución simulada (para desarrollo cross-platform)
+        sim_res = display.get('sim_resolution')  # e.g. "1024x600"
+        if sim_res:
+            sim_w, sim_h = (int(x) for x in sim_res.split('x'))
+        else:
+            sim_w, sim_h = None, None
+
         if fullscreen:
             self._set_fullscreen()
         else:
-            # Modo ventana (desarrollo): centrar en pantalla con tamaño real
-            self.update_idletasks()
-            w = self.winfo_screenwidth()
-            h = self.winfo_screenheight()
-            logger.info(f"Pantalla detectada: {w}x{h}")
+            # Modo ventana (desarrollo): usar resolución simulada si está definida
+            w = sim_w or self.winfo_screenwidth()
+            h = sim_h or self.winfo_screenheight()
+            logger.info(f"Ventana desarrollo: {w}x{h}")
             self.geometry(f"{w}x{h}+0+0")
 
         if hide_cursor:
             self.config(cursor='none')
 
-        # Grid 2+1: col 0 (tiempo) 60%, col 1 (crypto) 40%
-        self.grid_columnconfigure(0, weight=3)
-        self.grid_columnconfigure(1, weight=2)
-        self.grid_rowconfigure(0, weight=2)
-        self.grid_rowconfigure(1, weight=1)
+        # Forzar layout con minsize en píxeles para que funcione igual en Linux y Windows
+        # weight solo distribuye espacio "extra"; minsize garantiza la proporción real
+        self.update_idletasks()
+        sw = sim_w or self.winfo_screenwidth()
+        sh = sim_h or self.winfo_screenheight()
+        logger.info(f"Resolución efectiva para layout: {sw}x{sh}")
+
+        # Grid 2+1: col 0 (tiempo) 75%, col 1 (crypto) 25%
+        self.grid_columnconfigure(0, weight=3, minsize=int(sw * 0.65))
+        self.grid_columnconfigure(1, weight=1, minsize=int(sw * 0.35))
+        # Filas: arriba 88%, noticias 12%
+        self.grid_rowconfigure(0, weight=8, minsize=int(sh * 0.80))
+        self.grid_rowconfigure(1, weight=1, minsize=int(sh * 0.20))
 
         # --- Cajon 1: Reloj + Tiempo (arriba-izquierda) ---
         self.clock_panel = ClockWeatherPanel(
