@@ -13,7 +13,8 @@ CMC_BASE = "https://pro-api.coinmarketcap.com"
 class CoinMarketCapService:
     """Obtiene precios de BTC, ETH, SOL, XRP, DOT, POPCAT, WIF, ALI y AURA en una sola llamada."""
 
-    SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOT', 'POPCAT', 'WIF', 'ALI', 'AURA']
+    SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOT', 'POPCAT', 'WIF', 'ALI', 'AURA',
+               'JUP', 'STRK', 'GPU', 'RAIL', 'ROSE', 'HSUITE']
 
     def __init__(self, api_key, refresh_interval=300):
         self.api_key = api_key
@@ -22,12 +23,17 @@ class CoinMarketCapService:
             'btc_price': None, 'btc_change_24h': None,
             'eth_price': None, 'eth_change_24h': None,
             'sol_price': None, 'sol_change_24h': None,
-            'xrp_price': None, 'xrp_change_24h': None,
             'dot_price': None, 'dot_change_24h': None,
             'popcat_price': None, 'popcat_change_24h': None,
             'wif_price': None, 'wif_change_24h': None,
             'ali_price': None, 'ali_change_24h': None,
             'aura_price': None, 'aura_change_24h': None,
+            'jup_price': None, 'jup_change_24h': None,
+            'strk_price': None, 'strk_change_24h': None,
+            'gpu_price': None, 'gpu_change_24h': None,
+            'rail_price': None, 'rail_change_24h': None,
+            'rose_price': None, 'rose_change_24h': None,
+            'hsuite_price': None, 'hsuite_change_24h': None,
             'timestamp': None,
             'is_stale': True,
             'error': None,
