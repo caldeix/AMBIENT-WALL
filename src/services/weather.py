@@ -54,36 +54,6 @@ WEATHER_DESC = {
     395: "Tormenta con nieve",
 }
 
-# Mapa codigo -> emoji (ASCII-safe para compatibilidad de fuentes)
-WEATHER_EMOJI = {
-    113: "sol",
-    116: "sol/nub",
-    119: "nublado",
-    122: "nublado",
-    143: "niebla",
-    176: "lluvia",
-    179: "nieve",
-    182: "aguanieve",
-    200: "tormenta",
-    227: "nieve",
-    230: "nieve",
-    248: "niebla",
-    260: "niebla",
-    263: "llovizna",
-    266: "llovizna",
-    293: "lluvia",
-    296: "lluvia",
-    299: "lluvia",
-    302: "lluvia",
-    305: "lluvia",
-    308: "lluvia",
-    320: "nieve",
-    326: "nieve",
-    353: "lluvia",
-    356: "lluvia",
-    386: "tormenta",
-    389: "tormenta",
-}
 
 
 class WeatherService:
@@ -102,7 +72,6 @@ class WeatherService:
             'weather_code': None,
             'timestamp': None,
             'error': None,
-            'art_text': None,   # salida ASCII art de wttr.in (texto plano)
         }
         self._lock = threading.Lock()
 
@@ -137,7 +106,7 @@ class WeatherService:
                     'error': None,
                 })
             logger.info(
-                f"weather: Barcelona {self._cache['temp_c']}C, "
+                f"weather: {self.city} {self._cache['temp_c']}C, "
                 f"{self._cache['description']}, "
                 f"viento {self._cache['wind_kmh']} km/h"
             )
@@ -150,27 +119,10 @@ class WeatherService:
             with self._lock:
                 self._cache['error'] = str(e)
 
-    def _fetch_art(self):
-        """Obtiene el ASCII art de wttr.in con formato de terminal."""
-        try:
-            url = f"https://wttr.in/{self.city}?lang=es"
-            resp = requests.get(
-                url,
-                timeout=10,
-                headers={'User-Agent': 'curl/7.68.0'},
-            )
-            resp.raise_for_status()
-            clean = _NON_SGR_RE.sub('', resp.text).rstrip()
-            with self._lock:
-                self._cache['art_text'] = clean
-        except Exception as e:
-            logger.warning(f"weather art: {e}")
-
     def _run(self):
         time.sleep(random.randint(2, 10))
         while True:
             self._fetch()
-            self._fetch_art()
             time.sleep(self.refresh_interval)
 
     def start(self):

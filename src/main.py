@@ -53,14 +53,18 @@ def setup_logging(log_cfg):
 
 def _default_config():
     return {
+        'environment': 'pro',
         'display': {
-            'width': 1024, 'height': 600,
             'fullscreen': True, 'hide_cursor': True,
         },
         'api_keys': {'coinmarketcap': ''},
+        'cryptos': {
+            'symbols': ['BTC', 'ETH', 'SOL', 'DOT'],
+        },
+        'weather': {'city': 'Barcelona'},
         'refresh': {
-            'btc_price': 300, 'btc_chart': 300,
-            'gold': 1800, 'sp500': 1800,
+            'cryptos': 300, 'charts': 300,
+            'market': 1800, 'weather': 1800,
         },
         'logging': {
             'level': 'INFO', 'file': 'app.log',
@@ -126,10 +130,15 @@ def main():
             )
             config['refresh'][key] = 60
 
-    api_keys = config.get('api_keys', {})
-    cmc_key = api_keys.get('coinmarketcap', '')
-    if not cmc_key:
-        logger.warning("coinmarketcap: API key no configurada — BTC mostrara 'Dato no disponible'")
+    environment = config.get('environment', 'pro')
+    symbols     = config.get('cryptos', {}).get('symbols', ['BTC', 'ETH'])
+    api_keys    = config.get('api_keys', {})
+    cmc_key     = api_keys.get('coinmarketcap', '')
+
+    if environment == 'mockup':
+        logger.info("coinmarketcap: modo mockup activo — sin llamadas a la API")
+    elif not cmc_key:
+        logger.warning("coinmarketcap: API key no configurada — cryptos mostraran 'Dato no disponible'")
 
     # 4. Inicializar servicios
     from services.coinmarketcap import CoinMarketCapService
@@ -138,15 +147,18 @@ def main():
 
     cmc_service = CoinMarketCapService(
         api_key=cmc_key,
-        refresh_interval=refresh.get('btc_price', 300),
+        symbols=symbols,
+        refresh_interval=refresh.get('cryptos', 300),
+        environment=environment,
     )
     market_service = MarketDataService(
-        interval_btc_chart=refresh.get('btc_chart', 300),
-        interval_gold=refresh.get('gold', 1800),
-        interval_sp500=refresh.get('sp500', 1800),
+        interval_charts=refresh.get('charts', 300),
+        interval_market=refresh.get('market', 1800),
     )
+    weather_cfg  = config.get('weather', {})
+    weather_city = weather_cfg.get('city', 'Barcelona')
     weather_service = WeatherService(
-        city="Barcelona",
+        city=weather_city,
         refresh_interval=refresh.get('weather', 1800),
     )
 

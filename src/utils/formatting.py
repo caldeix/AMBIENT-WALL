@@ -12,17 +12,6 @@ def fmt_usd(value, decimals=2):
     return f"{sign}${integer_part},{decimal_part}"
 
 
-def fmt_change(value):
-    """Retorna (texto, color) para variacion 24h: ('+2,34%', '#00ff88')"""
-    if value is None:
-        return "—", "#8888aa"
-    arrow = "▲" if value >= 0 else "▼"
-    sign = "+" if value >= 0 else ""
-    color = "#00ff88" if value >= 0 else "#ff4466"
-    decimal_str = f"{abs(value):.2f}".replace('.', ',')
-    return f"{arrow} {sign}{decimal_str}%", color
-
-
 def fmt_gold(value):
     """Formato oro: $2.051,30 /oz"""
     if value is None:

@@ -7,7 +7,7 @@ from ui.theme import (
     FONT_BTC, FONT_CHANGE, FONT_TIMESTAMP,
 )
 from utils.formatting import (
-    fmt_usd, fmt_change, fmt_gold, fmt_sp500,
+    fmt_usd, fmt_gold, fmt_sp500,
     fmt_eur, fmt_ibex, usd_to_eur,
     time_ago, freshness_color,
 )
@@ -28,6 +28,18 @@ _F_BLOCK_CHANGE = ('Helvetica', 12, 'normal')
 _F_ALT_TICKER = ('Helvetica', 12, 'normal')   # era 10
 _F_ALT_VALUE  = ('Helvetica', 14, 'normal')   # era 12
 _F_ALT_EUR    = ('Helvetica', 11, 'normal')   # era 10
+
+
+_CHART_CRYPTOS = {'BTC', 'ETH'}
+
+
+def _auto_decimals(price):
+    """Decimales segun magnitud del precio."""
+    if price is None or price >= 100:
+        return 2
+    if price >= 0.01:
+        return 4
+    return 6
 
 
 def _pct_change(history):
@@ -81,8 +93,9 @@ class MarketPanel(tk.Frame):
         header = tk.Frame(block, bg=bg)
         header.pack(fill='x', padx=8, pady=(6, 2))
 
-        tk.Label(header, text=ticker, font=_F_BLOCK_TICKER,
-                 fg=TEXT_SECONDARY, bg=bg).pack(side='left', padx=(0, 8))
+        ticker_lbl = tk.Label(header, text=ticker, font=_F_BLOCK_TICKER,
+                              fg=TEXT_SECONDARY, bg=bg)
+        ticker_lbl.pack(side='left', padx=(0, 8))
 
         price_lbl = tk.Label(header, text="--", font=_F_BLOCK_PRICE,
                              fg=TEXT_PRIMARY, bg=bg)
@@ -93,6 +106,7 @@ class MarketPanel(tk.Frame):
         change_lbl.pack(side='left', padx=(8, 0))
 
         refs = {
+            'ticker_lbl': ticker_lbl,
             'price': price_lbl, 'change': change_lbl,
             'fig': None, 'ax': None, 'canvas': None,
             'date_start': None, 'date_end': None,
@@ -158,15 +172,16 @@ class MarketPanel(tk.Frame):
         bg = self._bg
         cell = tk.Frame(parent, bg=bg)
         cell.grid(row=row, column=col, sticky='nsew', padx=12, pady=5)
-        tk.Label(cell, text=ticker, font=_F_ALT_TICKER, fg=TEXT_SECONDARY,
-                 bg=bg, width=7, anchor='w').pack(side='left')
+        ticker_lbl = tk.Label(cell, text=ticker, font=_F_ALT_TICKER, fg=TEXT_SECONDARY,
+                              bg=bg, width=10, anchor='w')
+        ticker_lbl.pack(side='left')
         price_lbl = tk.Label(cell, text="--", font=_F_ALT_VALUE,
                              fg=TEXT_PRIMARY, bg=bg)
         price_lbl.pack(side='left', padx=(6, 0))
         eur_lbl = tk.Label(cell, text="", font=_F_ALT_EUR,
                            fg=TEXT_SECONDARY, bg=bg)
         eur_lbl.pack(side='left', padx=(4, 0))
-        return price_lbl, eur_lbl
+        return ticker_lbl, price_lbl, eur_lbl
 
     # ------------------------------------------------------------------
     # Layout
@@ -183,26 +198,25 @@ class MarketPanel(tk.Frame):
 
         tk.Frame(self, bg=BORDER, height=1).pack(fill='x')
 
-        # Fila 3: rejilla altcoins 4x3
+        # Fila 3+: rejilla altcoins generada dinamicamente desde config
+        self._build_alt_grid()
+
+    def _build_alt_grid(self):
+        """Construye la rejilla de altcoins dinamicamente desde cmc_service.symbols."""
+        self._alt_symbols = [s for s in self._cmc.symbols if s not in _CHART_CRYPTOS]
+
         grid = tk.Frame(self, bg=self._bg)
         grid.pack(fill='both', expand=True, padx=4, pady=(6, 4))
-        for c in range(3):
+        N_COLS = 3
+        for c in range(N_COLS):
             grid.grid_columnconfigure(c, weight=1)
 
-        self._sol_lbl,    self._sol_eur    = self._make_alt_row(grid, 0, 0, "SOL")
-        self._wif_lbl,    self._wif_eur    = self._make_alt_row(grid, 1, 0, "WIF")
-        self._dot_lbl,    self._dot_eur    = self._make_alt_row(grid, 2, 0, "DOT")
-        self._rail_lbl,   self._rail_eur   = self._make_alt_row(grid, 3, 0, "RAIL")
-
-        self._ali_lbl,    self._ali_eur    = self._make_alt_row(grid, 0, 1, "ALI")
-        self._jup_lbl,    self._jup_eur    = self._make_alt_row(grid, 1, 1, "JUP")
-        self._strk_lbl,   self._strk_eur   = self._make_alt_row(grid, 2, 1, "STRK")
-        self._rose_lbl,   self._rose_eur   = self._make_alt_row(grid, 3, 1, "ROSE")
-
-        self._popcat_lbl, self._popcat_eur = self._make_alt_row(grid, 0, 2, "POPCAT")
-        self._aura_lbl,   self._aura_eur   = self._make_alt_row(grid, 1, 2, "AURA")
-        self._gpu_lbl,    self._gpu_eur    = self._make_alt_row(grid, 2, 2, "GPU")
-        self._hsuite_lbl, self._hsuite_eur = self._make_alt_row(grid, 3, 2, "HSUITE")
+        self._alt_refs = {}
+        for i, sym in enumerate(self._alt_symbols):
+            row = i // N_COLS
+            col = i % N_COLS
+            ticker_lbl, price_lbl, eur_lbl = self._make_alt_row(grid, row, col, sym)
+            self._alt_refs[sym] = (ticker_lbl, price_lbl, eur_lbl)
 
     # ------------------------------------------------------------------
     # Polling y actualización
@@ -253,7 +267,11 @@ class MarketPanel(tk.Frame):
         else:
             refs['change'].config(text="")
 
-    def _update_coin(self, price_lbl, eur_lbl, price_val, eurusd, decimals=2):
+    def _update_coin(self, price_lbl, eur_lbl, price_val, eurusd, decimals=2,
+                     rank=None, ticker_lbl=None, ticker=""):
+        if ticker_lbl is not None:
+            prefix = f"#{rank} " if rank else ""
+            ticker_lbl.config(text=f"{prefix}{ticker}")
         if price_val is not None:
             price_lbl.config(text=fmt_usd(price_val, decimals), fg=TEXT_PRIMARY)
             eur = usd_to_eur(price_val, eurusd)
@@ -268,6 +286,10 @@ class MarketPanel(tk.Frame):
         eurusd = market.get('eurusd_rate')
 
         # --- BTC ---
+        btc_rank = cmc.get('btc_rank')
+        refs_btc = self._charts['BTC']
+        if btc_rank and 'ticker_lbl' in refs_btc:
+            refs_btc['ticker_lbl'].config(text=f"#{btc_rank} BTC")
         btc_price = cmc.get('btc_price')
         if btc_price is not None:
             self._set_price('BTC', fmt_usd(btc_price), cmc.get('btc_change_24h'))
@@ -284,6 +306,10 @@ class MarketPanel(tk.Frame):
             refs_btc['fresh_lbl'].config(text=f"hace {time_ago(ts)}")
 
         # --- ETH ---
+        eth_rank = cmc.get('eth_rank')
+        refs_eth = self._charts['ETH']
+        if eth_rank and 'ticker_lbl' in refs_eth:
+            refs_eth['ticker_lbl'].config(text=f"#{eth_rank} ETH")
         eth_price = cmc.get('eth_price')
         if eth_price is not None:
             self._set_price('ETH', fmt_usd(eth_price), cmc.get('eth_change_24h'))
@@ -330,16 +356,14 @@ class MarketPanel(tk.Frame):
             self._set_price('IBEX35', "--")
         self._draw_chart('IBEX35', ibex_hist, market.get('ibex_history_dates'))
 
-        # --- Altcoins (rejilla) ---
-        self._update_coin(self._sol_lbl,    self._sol_eur,    cmc.get('sol_price'),    eurusd)
-        self._update_coin(self._wif_lbl,    self._wif_eur,    cmc.get('wif_price'),    eurusd, 4)
-        self._update_coin(self._dot_lbl,    self._dot_eur,    cmc.get('dot_price'),    eurusd)
-        self._update_coin(self._rail_lbl,   self._rail_eur,   cmc.get('rail_price'),   eurusd, 4)
-        self._update_coin(self._ali_lbl,    self._ali_eur,    cmc.get('ali_price'),    eurusd, 4)
-        self._update_coin(self._jup_lbl,    self._jup_eur,    cmc.get('jup_price'),    eurusd, 4)
-        self._update_coin(self._strk_lbl,   self._strk_eur,   cmc.get('strk_price'),   eurusd, 4)
-        self._update_coin(self._rose_lbl,   self._rose_eur,   cmc.get('rose_price'),   eurusd, 4)
-        self._update_coin(self._popcat_lbl, self._popcat_eur, cmc.get('popcat_price'), eurusd, 4)
-        self._update_coin(self._aura_lbl,   self._aura_eur,   cmc.get('aura_price'),   eurusd, 4)
-        self._update_coin(self._gpu_lbl,    self._gpu_eur,    cmc.get('gpu_price'),    eurusd, 4)
-        self._update_coin(self._hsuite_lbl, self._hsuite_eur, cmc.get('hsuite_price'), eurusd, 4)
+        # --- Altcoins (rejilla dinamica) ---
+        for sym in self._alt_symbols:
+            ticker_lbl, price_lbl, eur_lbl = self._alt_refs[sym]
+            key = sym.lower()
+            price_val = cmc.get(f'{key}_price')
+            self._update_coin(
+                price_lbl, eur_lbl, price_val, eurusd,
+                decimals=_auto_decimals(price_val),
+                rank=cmc.get(f'{key}_rank'),
+                ticker_lbl=ticker_lbl, ticker=sym,
+            )

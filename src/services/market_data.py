@@ -22,15 +22,13 @@ class MarketDataService:
     """Obtiene historial BTC/ETH 7d y Oro/Plata/S&P500/IBEX35 1mo via yfinance.
 
     Intervalos configurables en config.yaml:
-      refresh.btc_chart  -> BTC + ETH historial         (default 300s  / 5 min)
-      refresh.gold       -> Oro + Plata + EUR/USD        (default 1800s / 30 min)
-      refresh.sp500      -> S&P500 + IBEX35              (default 1800s / 30 min)
+      refresh.charts  -> BTC + ETH historial           (default 300s  / 5 min)
+      refresh.market  -> Oro + Plata + S&P500 + IBEX35 (default 1800s / 30 min)
     """
 
-    def __init__(self, interval_btc_chart=300, interval_gold=1800, interval_sp500=1800):
-        self._interval_btc  = max(60, interval_btc_chart)
-        self._interval_gold = max(60, interval_gold)
-        self._interval_sp   = max(60, interval_sp500)
+    def __init__(self, interval_charts=300, interval_market=1800):
+        self._interval_charts = max(60, interval_charts)
+        self._interval_market = max(60, interval_market)
         self._cache = {
             # BTC
             'btc_history': None,
@@ -192,35 +190,28 @@ class MarketDataService:
     # Loops de hilos daemon
     # ------------------------------------------------------------------
 
-    def _run_btc(self):
+    def _run_charts(self):
         time.sleep(random.randint(5, 20))
         while True:
             self._fetch_btc_history()
             self._fetch_eth_history()
-            time.sleep(self._interval_btc)
+            time.sleep(self._interval_charts)
 
-    def _run_gold(self):
+    def _run_market(self):
         time.sleep(random.randint(10, 40))
         while True:
             self._fetch_gold()
             self._fetch_silver()
             self._fetch_eurusd()
-            time.sleep(self._interval_gold)
-
-    def _run_sp500(self):
-        time.sleep(random.randint(15, 45))
-        while True:
             self._fetch_sp500()
             self._fetch_ibex()
-            time.sleep(self._interval_sp)
+            time.sleep(self._interval_market)
 
     def start(self):
-        threading.Thread(target=self._run_btc,   daemon=True, name="svc-btc-chart").start()
-        threading.Thread(target=self._run_gold,  daemon=True, name="svc-gold").start()
-        threading.Thread(target=self._run_sp500, daemon=True, name="svc-sp500").start()
+        threading.Thread(target=self._run_charts, daemon=True, name="svc-charts").start()
+        threading.Thread(target=self._run_market, daemon=True, name="svc-market").start()
         logger.info(
             f"market_data: servicios iniciados — "
-            f"BTC+ETH chart {self._interval_btc}s | "
-            f"Oro+Plata+EURUSD {self._interval_gold}s | "
-            f"S&P500+IBEX35 {self._interval_sp}s"
+            f"charts {self._interval_charts}s | "
+            f"market {self._interval_market}s"
         )
