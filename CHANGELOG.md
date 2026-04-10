@@ -2,6 +2,111 @@
 
 ---
 
+## [1.2.0] — 2026-04-10
+
+### Config por entornos, modo mockup, cryptos dinámicas desde YAML, CMC rank y limpieza de código.
+
+#### Nuevas funcionalidades
+
+- **Entornos de ejecución (`environment`):** nuevo campo en `config.yaml` con tres valores:
+  - `mockup` — sin llamadas a la API de CoinMarketCap; la cache se rellena con precios
+    inventados realistas (con jitter por ciclo para simular movimiento). Ideal para desarrollo
+    sin gastar créditos de API.
+  - `test` — llamadas reales pero con configuración de desarrollo.
+  - `pro` — producción completa (Raspberry Pi, fullscreen, sin cursor).
+
+- **Cryptos configurables desde YAML:** la lista de símbolos se lee de
+  `config.yaml → cryptos.symbols`. Añadir o quitar una moneda ya no requiere tocar código.
+  La cache de `CoinMarketCapService` se genera automáticamente a partir de los símbolos
+  configurados usando dict comprehension.
+
+- **CMC Rank visible:** cada crypto muestra su posición en CoinMarketCap: `#1 BTC`,
+  `#2 ETH`, `#5 SOL`. El rank se obtiene del campo `cmc_rank` de la API y se actualiza
+  en cada ciclo de refresco. Mientras no llega el primer dato, el label muestra el símbolo limpio.
+
+- **Rejilla de altcoins dinámica:** `market_panel.py` construye la rejilla inferior en tiempo
+  de ejecución según los símbolos del config (excluye BTC y ETH, que van en bloques con gráfica).
+  3 columnas fijas, filas calculadas automáticamente. Sin referencias hardcodeadas por moneda.
+
+- **Decimales automáticos:** los precios de altcoins usan `_auto_decimals(price)` para
+  determinar los decimales según la magnitud del precio: ≥$100 → 2, ≥$0.01 → 4, <$0.01 → 6.
+
+- **Script de limpieza:** `scripts/clean_pycache.sh` elimina todos los `__pycache__/`,
+  `.pyc` y `.pyo` del árbol del proyecto. Usar antes de copiar al servidor.
+
+#### Nuevo rumbo de diseño
+
+- **Layout simplificado a panel único:** se abandona el grid 4-cajones (reloj/tiempo,
+  mercados, nodo DePIN, noticias RSS) en favor de una sola pantalla centrada en datos
+  financieros. El nuevo layout es:
+  - **Top bar (5%):** una línea con hora, fecha y resumen del tiempo actual (temperatura +
+    condición). Sin panel de reloj independiente, sin ASCII art, sin viento ni humedad.
+  - **Market panel (95%):** ocupa casi toda la pantalla. Fila 1: BTC, ETH, Oro con
+    sparkline. Fila 2: S&P500, Plata, IBEX35 con sparkline. Fila 3+: rejilla de altcoins
+    dinámica 3 columnas.
+- **Eliminados:** panel de reloj/tiempo grande (`clock_weather_panel`), panel DePIN
+  (`placeholder_panel`), ticker de noticias (`news_panel`, `rss.py`). El foco del
+  dashboard es exclusivamente mercados y precios en tiempo real.
+
+#### Cambios en configuración
+
+- Nuevo campo `environment: pro` en `config.yaml` y `config.example.yaml`.
+- Nueva sección `cryptos.symbols` con la lista de monedas a mostrar.
+- Claves de refresco renombradas para ser más descriptivas:
+  - `btc_price` → `cryptos` (aplica a todas las cryptos, no solo BTC)
+  - `btc_chart` → `charts`
+  - `gold` + `sp500` unificados en `market` (mismo intervalo para todos los activos de Yahoo Finance)
+  - `weather` sin cambios.
+
+#### Cambios en servicios
+
+- `CoinMarketCapService`:
+  - Constructor recibe `symbols` (lista) y `environment` en lugar de tenerlos hardcodeados.
+  - `SYMBOLS` eliminado como constante de clase; los símbolos viven en `self.symbols`.
+  - Cache generada dinámicamente: `{sym_price, sym_change_24h, sym_rank}` × N símbolos.
+  - `_fetch_mockup()`: rellena la cache desde `_MOCKUP` dict con jitter aleatorio ±0.5%.
+  - `_fetch_real()`: separado de `_fetch_mockup()` con lógica limpia; el parámetro `aux`
+    simplificado a solo `cmc_rank` (se eliminaron los campos de volumen no utilizados).
+  - Campos eliminados del cache: `is_stale`, `consecutive_failures` (no se leían en ningún sitio).
+
+- `MarketDataService`:
+  - Constructor simplificado: `interval_charts` e `interval_market` en lugar de tres parámetros.
+  - `_run_gold` + `_run_sp500` fusionados en un único thread `_run_market`.
+
+#### Limpieza de código
+
+- Eliminados archivos sin uso: `src/clock/clock.py`, `src/ui/widgets/placeholder_panel.py`,
+  `src/ui/widgets/clock_weather_panel.py`.
+- Eliminada función `fmt_change()` de `formatting.py` (importada pero nunca llamada).
+- Eliminado dict `WEATHER_EMOJI` de `weather.py` (nunca referenciado).
+- Eliminados `_fetch_art()`, `art_text` de `weather.py` (solo usados por `clock_weather_panel`,
+  que fue eliminado).
+- Eliminados `display.width`, `display.height` y `refresh.news` de `config.example.yaml`.
+- Corregido docstring de `CoinMarketCapService` (mencionaba XRP, que no estaba en SYMBOLS).
+- Corregido log en `_fetch` que referenciaba `xrp_price` (moneda eliminada).
+
+---
+
+## [1.2.1] — 2026-04-10
+
+### Ciudad del tiempo configurable desde config.yaml.
+
+#### Cambios
+
+- **`weather.city` en config:** la ciudad para el servicio meteorológico pasa de estar
+  hardcodeada en `main.py` (`city="Barcelona"`) a leerse de `config.yaml → weather.city`.
+  Valor por defecto: `Barcelona`. Cualquier ciudad soportada por wttr.in es válida.
+
+  ```yaml
+  weather:
+    city: "Barcelona"   # Cambiar por tu ciudad
+  ```
+
+- `_default_config()` actualizado para incluir la sección `weather`.
+- `WeatherService` no cambia; el parámetro `city` ya existía en el constructor.
+
+---
+
 ## [1.1.0] — 2026-03-08
 
 ### Nuevos activos, rediseno del panel de tiempo, layout 3+1 y mejoras visuales.
