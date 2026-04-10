@@ -3,11 +3,19 @@
 # IMPORTANTE: config.yaml esta en .gitignore — nunca commitear la API key real.
 
 # ---------------------------------------------------------------------------
+# Entorno: determina el comportamiento de los servicios de datos
+#   mockup  — datos inventados para las APIs con API key (sin llamadas externas)
+#   test    — llamadas reales, configuracion de desarrollo (fullscreen off, etc.)
+#   pro     — produccion completa (Raspberry Pi, fullscreen, etc.)
+# ---------------------------------------------------------------------------
+environment: pro
+
+# ---------------------------------------------------------------------------
 # Pantalla
 # ---------------------------------------------------------------------------
 display:
   fullscreen: true      # true en Raspberry Pi para modo cuadro
-  hide_cursor: false     # true en produccion (sin raton)
+  hide_cursor: true     # true en produccion (sin raton)
 
 # ---------------------------------------------------------------------------
 # API Keys
@@ -16,22 +24,45 @@ api_keys:
   coinmarketcap: "TU_API_KEY_AQUI"   # https://coinmarketcap.com/api/
 
 # ---------------------------------------------------------------------------
+# Cryptos a mostrar (se usan en el orden indicado)
+#   - BTC y ETH siempre aparecen en los bloques superiores con grafica
+#   - El resto se muestran en la rejilla de altcoins (3 columnas)
+# ---------------------------------------------------------------------------
+cryptos:
+  symbols:
+    - BTC
+    - ETH
+    - SOL
+    - DOT
+    - POPCAT
+    - WIF
+    - ALI
+    - AURA
+    - JUP
+    - STRK
+    - GPU
+    - RAIL
+    - ROSE
+    - HSUITE
+
+# ---------------------------------------------------------------------------
+# Meteorologia (wttr.in, sin API key)
+# ---------------------------------------------------------------------------
+weather:
+  city: "Barcelona"    # Cualquier ciudad soportada por wttr.in
+
+# ---------------------------------------------------------------------------
 # Intervalos de refresco en segundos (minimo permitido: 60s)
-# Fuente de datos de cada item:
-#   btc_price  -> CoinMarketCap API  (precio BTC + ETH + SOL + XRP + DOT + ...)
-#   btc_chart  -> Yahoo Finance      (historial BTC 7d para sparkline)
-#   gold       -> Yahoo Finance      (Gold Futures GC=F, precio /oz)
-#   sp500      -> Yahoo Finance      (indice S&P 500 ^GSPC)
-#   weather    -> wttr.in Barcelona  (temperatura, viento, humedad — sin API key)
-#   news       -> RSS Cointelegraph + CoinDesk (sin API key)
+#   cryptos  -> CoinMarketCap API  (precios + rank de todas las cryptos)
+#   charts   -> Yahoo Finance      (historial BTC/ETH 7d para sparkline)
+#   market   -> Yahoo Finance      (Oro, Plata, S&P500, IBEX35, EUR/USD)
+#   weather  -> wttr.in (ciudad configurada arriba)
 # ---------------------------------------------------------------------------
 refresh:
-  btc_price: 300     #  5 min  — CoinMarketCap
-  btc_chart: 300     #  5 min  — Yahoo Finance (sparkline)
-  gold:      1800    # 30 min  — Yahoo Finance
-  sp500:     1800    # 30 min  — Yahoo Finance
-  weather:   1800    # 30 min  — wttr.in
-  news:      1800    # 30 min  — RSS feeds
+  cryptos: 300     #  5 min
+  charts:  300     #  5 min
+  market:  1800    # 30 min
+  weather: 1800    # 30 min
 
 # ---------------------------------------------------------------------------
 # Logging
