@@ -117,18 +117,21 @@ cryptos:
     - HSUITE
 
 # ---------------------------------------------------------------------------
-# Intervalos de refresco en segundos (minimo permitido: 60s)
+# Intervalos de refresco en segundos
 #
-#   cryptos  — CoinMarketCap API (precios + rank de todas las cryptos)
-#   charts   — Yahoo Finance (historial BTC/ETH 7d para sparklines)
-#   market   — Yahoo Finance (Oro, Plata, S&P500, IBEX35, EUR/USD)
-#   weather  — wttr.in (temperatura y condicion meteorologica)
+# Cada clave tiene un minimo propio; si se configura un valor menor,
+# la aplicacion lo ignora y usa el minimo indicado:
+#
+#   cryptos  — CoinMarketCap API (precios + rank)     minimo: 300 s  (5 min)
+#   charts   — Yahoo Finance sparklines BTC/ETH 7d    minimo: 300 s  (5 min)
+#   market   — Yahoo Finance Oro, Plata, S&P, IBEX    minimo: 1800 s (30 min)
+#   weather  — wttr.in temperatura y condicion        minimo: 1800 s (30 min)
 # ---------------------------------------------------------------------------
 refresh:
-  cryptos: 300     #  5 min  — CoinMarketCap
-  charts:  300     #  5 min  — Yahoo Finance sparklines
-  market:  1800    # 30 min  — Yahoo Finance mercado
-  weather: 1800    # 30 min  — wttr.in
+  cryptos: 300     #  5 min  — minimo permitido
+  charts:  300     #  5 min  — minimo permitido
+  market:  1800    # 30 min  — minimo permitido
+  weather: 1800    # 30 min  — minimo permitido
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -6,6 +6,28 @@
 
 ---
 
+## [1.3.2] — 2026-04-12
+
+### Mínimos de refresco por intervalo.
+
+#### Cambiado
+
+- **Validación de intervalos de refresco:** cada clave tiene ahora su propio mínimo
+  en lugar del genérico de 60s. Si el usuario configura un valor inferior, la app
+  lo ignora con un warning en el log y aplica el mínimo:
+
+  | Clave | Mínimo | Razón |
+  |---|---|---|
+  | `cryptos` | 300 s (5 min) | Cuota API gratuita de CoinMarketCap |
+  | `charts` | 300 s (5 min) | Yahoo Finance sparklines |
+  | `market` | 1800 s (30 min) | Yahoo Finance mercado (Oro, Plata, S&P, IBEX) |
+  | `weather` | 1800 s (30 min) | wttr.in meteorología |
+
+- **`config.example.yaml`:** comentarios actualizados indicando el mínimo de cada clave.
+- **README:** tabla de configuración actualizada con los mínimos por clave.
+
+---
+
 ## [1.3.1] — 2026-04-12
 
 ### Ciudad dinámica en top bar.

@@ -109,12 +109,19 @@ def main():
     logger.info("=" * 60)
     logger.info("Crypto Wall Dashboard arrancando...")
 
-    # Validar intervalos mínimos
+    # Validar intervalos mínimos por clave
+    _REFRESH_MIN = {
+        'cryptos': 300,   # CoinMarketCap — mín. 5 min (cuota API gratuita)
+        'charts':  300,   # Yahoo Finance sparklines — mín. 5 min
+        'market':  1800,  # Yahoo Finance mercado — mín. 30 min
+        'weather': 1800,  # wttr.in — mín. 30 min
+    }
     refresh = config.get('refresh', {})
-    for key, val in refresh.items():
-        if isinstance(val, (int, float)) and val < 60:
-            logger.warning(f"Intervalo '{key}' = {val}s < mínimo 60s. Usando 60s.")
-            config['refresh'][key] = 60
+    for key, min_val in _REFRESH_MIN.items():
+        val = refresh.get(key, min_val)
+        if not isinstance(val, (int, float)) or val < min_val:
+            logger.warning(f"Intervalo '{key}' = {val}s < mínimo {min_val}s. Usando {min_val}s.")
+            config['refresh'][key] = min_val
 
     environment = config.get('environment', 'pro')
     cmc_key     = config.get('api_keys', {}).get('coinmarketcap', '')

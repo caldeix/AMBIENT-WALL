@@ -1,6 +1,6 @@
 # Crypto Wall Dashboard
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.2-blue)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%204-red?logo=raspberry-pi&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -235,10 +235,10 @@ Copia `config.example.yaml` a `config.yaml`. Referencia completa de campos:
 | `weather.city` | string | Ciudad para wttr.in. Ejemplos: `Barcelona`, `Madrid`, `London`. |
 | `chart_blocks[]` | lista | Hasta 6 bloques con sparkline. Ver tabla abajo. |
 | `cryptos.symbols` | lista | Símbolos CMC para la rejilla de altcoins. |
-| `refresh.cryptos` | int (seg) | Intervalo refresco precios CMC. Mínimo 60. |
-| `refresh.charts` | int (seg) | Intervalo sparklines BTC/ETH Yahoo Finance. |
-| `refresh.market` | int (seg) | Intervalo Oro, Plata, S&P500, IBEX35, EUR/USD. |
-| `refresh.weather` | int (seg) | Intervalo meteorología wttr.in. |
+| `refresh.cryptos` | int (seg) | Intervalo refresco precios CMC. Mínimo 300 (5 min). |
+| `refresh.charts` | int (seg) | Intervalo sparklines BTC/ETH Yahoo Finance. Mínimo 300 (5 min). |
+| `refresh.market` | int (seg) | Intervalo Oro, Plata, S&P500, IBEX35, EUR/USD. Mínimo 1800 (30 min). |
+| `refresh.weather` | int (seg) | Intervalo meteorología wttr.in. Mínimo 1800 (30 min). |
 | `logging.level` | `DEBUG\|INFO\|WARNING\|ERROR` | Nivel de log. |
 | `logging.file` | string | Nombre del fichero de log rotativo. |
 
