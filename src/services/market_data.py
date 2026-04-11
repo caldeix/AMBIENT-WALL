@@ -1,3 +1,13 @@
+"""
+MarketDataService — historial y precios de activos Yahoo Finance.
+
+Los activos a obtener se leen de chart_blocks en config_manager.
+Si no hay config_manager, usa los bloques por defecto (backward compat).
+
+Cache keys se generan dinámicamente a partir del ticker:
+  'BTC-USD' → 'btc_usd'   '^GSPC' → 'gspc'   'GC=F' → 'gc_f'
+"""
+import re
 import threading
 import time
 import random
@@ -5,9 +15,36 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Bloques por defecto si no hay config_manager
+DEFAULT_CHART_BLOCKS = [
+    {'label': 'BTC',    'ticker': 'BTC-USD', 'period': '7d',  'cmc_symbol': 'BTC',  'format': 'crypto'},
+    {'label': 'ETH',    'ticker': 'ETH-USD', 'period': '7d',  'cmc_symbol': 'ETH',  'format': 'crypto'},
+    {'label': 'ORO',    'ticker': 'GC=F',    'period': '1mo', 'cmc_symbol': None,    'format': 'commodity'},
+    {'label': 'S&P500', 'ticker': '^GSPC',   'period': '1mo', 'cmc_symbol': None,    'format': 'index'},
+    {'label': 'PLATA',  'ticker': 'SI=F',    'period': '1mo', 'cmc_symbol': None,    'format': 'commodity'},
+    {'label': 'IBEX35', 'ticker': '^IBEX',   'period': '1mo', 'cmc_symbol': None,    'format': 'index_int'},
+]
+
+_FX_TICKER = 'EURUSD=X'
+
+
+def ticker_key(ticker):
+    """Convierte ticker a clave de cache segura.
+    'BTC-USD' → 'btc_usd'  '^GSPC' → 'gspc'  'GC=F' → 'gc_f'
+    """
+    return re.sub(r'[^a-z0-9]', '_', ticker.lower()).strip('_')
+
+
+def _interval_for_period(period):
+    return '1h' if period == '7d' else '1d'
+
+
+def _max_pts_for_period(period):
+    return 168 if period == '7d' else 60
+
 
 def _extract_history(hist, max_pts=60):
-    """Extrae lista de precios y fechas de inicio/fin de un DataFrame de yfinance."""
+    """Extrae lista de precios y etiquetas inicio/fin de un DataFrame yfinance."""
     prices = [float(p) for p in hist['Close'].dropna().tolist()]
     if len(prices) > max_pts:
         step = max(1, len(prices) // max_pts)
@@ -19,51 +56,52 @@ def _extract_history(hist, max_pts=60):
 
 
 class MarketDataService:
-    """Obtiene historial BTC/ETH 7d y Oro/Plata/S&P500/IBEX35 1mo via yfinance.
+    """Obtiene historial y precios de activos Yahoo Finance.
 
-    Intervalos configurables en config.yaml:
-      refresh.charts  -> BTC + ETH historial           (default 300s  / 5 min)
-      refresh.market  -> Oro + Plata + S&P500 + IBEX35 (default 1800s / 30 min)
+    Dos threads paralelos:
+      svc-charts  — tickers con period='7d'  (historial intradía)
+      svc-market  — tickers con period!='7d' + EUR/USD
+
+    Hot-reload: si se pasa config_manager, re-lee chart_blocks en cada
+    ciclo y ajusta los fetches sin reiniciar la app.
     """
 
-    def __init__(self, interval_charts=300, interval_market=1800):
+    def __init__(self, interval_charts=300, interval_market=1800, config_manager=None):
         self._interval_charts = max(60, interval_charts)
         self._interval_market = max(60, interval_market)
+        self._cfg_mgr         = config_manager
+        # Dos eventos independientes, uno por thread
+        if config_manager:
+            self._reload_ev_charts = config_manager.register_listener()
+            self._reload_ev_market = config_manager.register_listener()
+        else:
+            self._reload_ev_charts = None
+            self._reload_ev_market = None
+
         self._cache = {
-            # BTC
-            'btc_history': None,
-            'btc_history_dates': None,
-            'btc_history_timestamp': None,
-            # ETH
-            'eth_history': None,
-            'eth_history_dates': None,
-            'eth_history_timestamp': None,
-            # Oro
-            'gold_price': None,
-            'gold_history': None,
-            'gold_history_dates': None,
-            'gold_timestamp': None,
-            # Plata
-            'silver_price': None,
-            'silver_history': None,
-            'silver_history_dates': None,
-            'silver_timestamp': None,
-            # EUR/USD
-            'eurusd_rate': None,
+            'eurusd_rate':      None,
             'eurusd_timestamp': None,
-            # S&P500
-            'sp500_price': None,
-            'sp500_history': None,
-            'sp500_history_dates': None,
-            'sp500_timestamp': None,
-            # IBEX35
-            'ibex_price': None,
-            'ibex_history': None,
-            'ibex_history_dates': None,
-            'ibex_timestamp': None,
-            'error': None,
+            'error':            None,
         }
         self._lock = threading.Lock()
+
+        # Inicializar entradas de cache para los bloques iniciales
+        initial_blocks = (
+            config_manager.get_chart_blocks() if config_manager else DEFAULT_CHART_BLOCKS
+        )
+        self._ensure_cache_keys(initial_blocks)
+
+    # ------------------------------------------------------------------
+    # Cache
+    # ------------------------------------------------------------------
+
+    def _ensure_cache_keys(self, blocks):
+        """Añade entradas de cache para bloques nuevos (no borra los existentes)."""
+        with self._lock:
+            for block in blocks:
+                key = ticker_key(block['ticker'])
+                for suffix in ('price', 'history', 'history_dates', 'timestamp'):
+                    self._cache.setdefault(f'{key}_{suffix}', None)
 
     def get_data(self):
         with self._lock:
@@ -73,110 +111,37 @@ class MarketDataService:
     # Fetches
     # ------------------------------------------------------------------
 
-    def _fetch_btc_history(self):
+    def _fetch_ticker(self, t, period):
+        """Descarga historial y precio actual de cualquier ticker Yahoo Finance."""
         try:
             import yfinance as yf
-            hist = yf.Ticker("BTC-USD").history(period="7d", interval="1h")
-            if not hist.empty:
-                prices, dates = _extract_history(hist, max_pts=168)
-                with self._lock:
-                    self._cache['btc_history']           = prices
-                    self._cache['btc_history_dates']     = dates
-                    self._cache['btc_history_timestamp'] = time.time()
-                logger.info(f"market_data: BTC historial ({len(prices)} pts)")
+            interval = _interval_for_period(period)
+            max_pts  = _max_pts_for_period(period)
+            hist = yf.Ticker(t).history(period=period, interval=interval)
+            if hist.empty:
+                logger.warning(f"market_data: {t} → historial vacío")
+                return
+            clean  = hist['Close'].dropna()
+            price  = float(clean.iloc[-1])
+            prices, dates = _extract_history(hist, max_pts=max_pts)
+            key = ticker_key(t)
+            with self._lock:
+                self._cache[f'{key}_price']         = price
+                self._cache[f'{key}_history']       = prices
+                self._cache[f'{key}_history_dates'] = dates
+                self._cache[f'{key}_timestamp']     = time.time()
+            logger.info(f"market_data: {t} {price:.4g} ({len(prices)} pts)")
         except ImportError:
             logger.error("market_data: yfinance no instalado")
             with self._lock:
                 self._cache['error'] = "yfinance no instalado"
         except Exception as e:
-            logger.error(f"market_data: BTC historial error: {e}")
-
-    def _fetch_eth_history(self):
-        try:
-            import yfinance as yf
-            hist = yf.Ticker("ETH-USD").history(period="7d", interval="1h")
-            if not hist.empty:
-                prices, dates = _extract_history(hist, max_pts=168)
-                with self._lock:
-                    self._cache['eth_history']           = prices
-                    self._cache['eth_history_dates']     = dates
-                    self._cache['eth_history_timestamp'] = time.time()
-                logger.info(f"market_data: ETH historial ({len(prices)} pts)")
-        except Exception as e:
-            logger.error(f"market_data: ETH historial error: {e}")
-
-    def _fetch_gold(self):
-        try:
-            import yfinance as yf
-            hist = yf.Ticker("GC=F").history(period="1mo", interval="1d")
-            if not hist.empty:
-                clean = hist['Close'].dropna()
-                price = float(clean.iloc[-1])
-                prices, dates = _extract_history(hist)
-                with self._lock:
-                    self._cache['gold_price']         = price
-                    self._cache['gold_history']       = prices
-                    self._cache['gold_history_dates'] = dates
-                    self._cache['gold_timestamp']     = time.time()
-                logger.info(f"market_data: Oro ${price:.2f}/oz")
-        except Exception as e:
-            logger.error(f"market_data: Oro error: {e}")
-
-    def _fetch_silver(self):
-        try:
-            import yfinance as yf
-            hist = yf.Ticker("SI=F").history(period="1mo", interval="1d")
-            if not hist.empty:
-                clean = hist['Close'].dropna()
-                price = float(clean.iloc[-1])
-                prices, dates = _extract_history(hist)
-                with self._lock:
-                    self._cache['silver_price']         = price
-                    self._cache['silver_history']       = prices
-                    self._cache['silver_history_dates'] = dates
-                    self._cache['silver_timestamp']     = time.time()
-                logger.info(f"market_data: Plata ${price:.2f}/oz")
-        except Exception as e:
-            logger.error(f"market_data: Plata error: {e}")
-
-    def _fetch_sp500(self):
-        try:
-            import yfinance as yf
-            hist = yf.Ticker("^GSPC").history(period="1mo", interval="1d")
-            if not hist.empty:
-                clean = hist['Close'].dropna()
-                price = float(clean.iloc[-1])
-                prices, dates = _extract_history(hist)
-                with self._lock:
-                    self._cache['sp500_price']         = price
-                    self._cache['sp500_history']       = prices
-                    self._cache['sp500_history_dates'] = dates
-                    self._cache['sp500_timestamp']     = time.time()
-                logger.info(f"market_data: S&P500 {price:.2f} pts")
-        except Exception as e:
-            logger.error(f"market_data: S&P500 error: {e}")
-
-    def _fetch_ibex(self):
-        try:
-            import yfinance as yf
-            hist = yf.Ticker("^IBEX").history(period="1mo", interval="1d")
-            if not hist.empty:
-                clean = hist['Close'].dropna()
-                price = float(clean.iloc[-1])
-                prices, dates = _extract_history(hist)
-                with self._lock:
-                    self._cache['ibex_price']         = price
-                    self._cache['ibex_history']       = prices
-                    self._cache['ibex_history_dates'] = dates
-                    self._cache['ibex_timestamp']     = time.time()
-                logger.info(f"market_data: IBEX35 {price:.2f} pts")
-        except Exception as e:
-            logger.error(f"market_data: IBEX35 error: {e}")
+            logger.error(f"market_data: {t} error: {e}")
 
     def _fetch_eurusd(self):
         try:
             import yfinance as yf
-            hist = yf.Ticker("EURUSD=X").history(period="5d")
+            hist = yf.Ticker(_FX_TICKER).history(period="5d")
             if not hist.empty:
                 rate = float(hist['Close'].dropna().iloc[-1])
                 with self._lock:
@@ -187,25 +152,46 @@ class MarketDataService:
             logger.error(f"market_data: EUR/USD error: {e}")
 
     # ------------------------------------------------------------------
-    # Loops de hilos daemon
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _current_blocks(self):
+        if self._cfg_mgr:
+            return self._cfg_mgr.get_chart_blocks()
+        return DEFAULT_CHART_BLOCKS
+
+    def _interruptible_wait(self, reload_ev, seconds):
+        if reload_ev:
+            woken = reload_ev.wait(timeout=seconds)
+            if woken:
+                reload_ev.clear()
+        else:
+            time.sleep(seconds)
+
+    # ------------------------------------------------------------------
+    # Threads
     # ------------------------------------------------------------------
 
     def _run_charts(self):
         time.sleep(random.randint(5, 20))
         while True:
-            self._fetch_btc_history()
-            self._fetch_eth_history()
-            time.sleep(self._interval_charts)
+            blocks = self._current_blocks()
+            self._ensure_cache_keys(blocks)
+            for block in blocks:
+                if block.get('period', '1mo') == '7d':
+                    self._fetch_ticker(block['ticker'], '7d')
+            self._interruptible_wait(self._reload_ev_charts, self._interval_charts)
 
     def _run_market(self):
         time.sleep(random.randint(10, 40))
         while True:
-            self._fetch_gold()
-            self._fetch_silver()
+            blocks = self._current_blocks()
+            self._ensure_cache_keys(blocks)
             self._fetch_eurusd()
-            self._fetch_sp500()
-            self._fetch_ibex()
-            time.sleep(self._interval_market)
+            for block in blocks:
+                if block.get('period', '1mo') != '7d':
+                    self._fetch_ticker(block['ticker'], block.get('period', '1mo'))
+            self._interruptible_wait(self._reload_ev_market, self._interval_market)
 
     def start(self):
         threading.Thread(target=self._run_charts, daemon=True, name="svc-charts").start()
