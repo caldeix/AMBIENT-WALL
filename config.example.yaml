@@ -3,10 +3,13 @@
 # IMPORTANTE: config.yaml esta en .gitignore — nunca commitear la API key real.
 
 # ---------------------------------------------------------------------------
-# Entorno: determina el comportamiento de los servicios de datos
-#   mockup  — datos inventados para las APIs con API key (sin llamadas externas)
-#   test    — llamadas reales, configuracion de desarrollo (fullscreen off, etc.)
-#   pro     — produccion completa (Raspberry Pi, fullscreen, etc.)
+# Entorno de ejecucion
+#   mockup  — sin llamadas a CoinMarketCap; precios inventados para desarrollo
+#   test    — llamadas reales, pantalla en modo ventana (fullscreen: false)
+#   pro     — produccion completa (Raspberry Pi, fullscreen, sin cursor)
+#
+# El entorno solo afecta a CoinMarketCap. Weather y Yahoo Finance
+# siempre hacen llamadas reales (son servicios gratuitos sin API key).
 # ---------------------------------------------------------------------------
 environment: pro
 
@@ -14,24 +17,92 @@ environment: pro
 # Pantalla
 # ---------------------------------------------------------------------------
 display:
-  fullscreen: true      # true en Raspberry Pi para modo cuadro
-  hide_cursor: true     # true en produccion (sin raton)
+  fullscreen: true       # true en Raspberry Pi / pro; false para desarrollo en PC
+  hide_cursor: true      # true en produccion (sin raton); false en desarrollo
+  # sim_resolution: 1024x600   # opcional — simula resolucion en modo ventana
 
 # ---------------------------------------------------------------------------
 # API Keys
 # ---------------------------------------------------------------------------
 api_keys:
-  coinmarketcap: "TU_API_KEY_AQUI"   # https://coinmarketcap.com/api/
+  coinmarketcap: "TU_API_KEY_AQUI"
+  # Plan gratuito de CoinMarketCap es suficiente (hasta 10.000 llamadas/mes).
+  # Registro en: https://coinmarketcap.com/api/
+  # No necesaria si environment: mockup
 
 # ---------------------------------------------------------------------------
-# Cryptos a mostrar (se usan en el orden indicado)
-#   - BTC y ETH siempre aparecen en los bloques superiores con grafica
-#   - El resto se muestran en la rejilla de altcoins (3 columnas)
+# Meteorologia
+# ---------------------------------------------------------------------------
+weather:
+  city: "Barcelona"
+  # Cualquier ciudad soportada por wttr.in. Ejemplos: Madrid, London, "New York"
+  # Servicio gratuito, sin API key. https://wttr.in
+
+# ---------------------------------------------------------------------------
+# Bloques de grafico (filas 1 y 2 del dashboard, maximo 6)
+#
+# Cada bloque ocupa un slot con sparkline. Se muestran en orden, 3 por fila.
+# Puedes configurarlos desde la webapp (scripts/app-config) o editando aqui.
+#
+# Campos:
+#   label      — texto que aparece en el header del bloque
+#   ticker     — simbolo de Yahoo Finance (BTC-USD, GC=F, ^GSPC, ^IBEX, ETH-USD...)
+#   period     — periodo del historial: "7d" o "1mo"
+#   cmc_symbol — simbolo en CoinMarketCap (solo para cryptos; null para el resto)
+#   format     — tipo de formato del precio:
+#                  crypto     → $67.234,12
+#                  commodity  → $2.321,40 /oz
+#                  index      → 5.102,45 pts
+#                  index_int  → 11.234 pts  (IBEX, sin decimales)
+# ---------------------------------------------------------------------------
+chart_blocks:
+  - label: "BTC"
+    ticker: "BTC-USD"
+    period: "7d"
+    cmc_symbol: "BTC"
+    format: "crypto"
+
+  - label: "ETH"
+    ticker: "ETH-USD"
+    period: "7d"
+    cmc_symbol: "ETH"
+    format: "crypto"
+
+  - label: "ORO"
+    ticker: "GC=F"
+    period: "1mo"
+    cmc_symbol: null
+    format: "commodity"
+
+  - label: "S&P500"
+    ticker: "^GSPC"
+    period: "1mo"
+    cmc_symbol: null
+    format: "index"
+
+  - label: "PLATA"
+    ticker: "SI=F"
+    period: "1mo"
+    cmc_symbol: null
+    format: "commodity"
+
+  - label: "IBEX35"
+    ticker: "^IBEX"
+    period: "1mo"
+    cmc_symbol: null
+    format: "index_int"
+
+# ---------------------------------------------------------------------------
+# Altcoin Grid (rejilla inferior del dashboard)
+#
+# Cryptos que aparecen en la rejilla de 3 columnas debajo de los graficos.
+# Solo pueden ser simbolos de CoinMarketCap.
+# Los simbolos definidos en chart_blocks como cmc_symbol se excluyen automaticamente.
+#
+# Edita esta lista o usa la webapp para drag & drop.
 # ---------------------------------------------------------------------------
 cryptos:
   symbols:
-    - BTC
-    - ETH
     - SOL
     - DOT
     - POPCAT
@@ -46,29 +117,24 @@ cryptos:
     - HSUITE
 
 # ---------------------------------------------------------------------------
-# Meteorologia (wttr.in, sin API key)
-# ---------------------------------------------------------------------------
-weather:
-  city: "Barcelona"    # Cualquier ciudad soportada por wttr.in
-
-# ---------------------------------------------------------------------------
 # Intervalos de refresco en segundos (minimo permitido: 60s)
-#   cryptos  -> CoinMarketCap API  (precios + rank de todas las cryptos)
-#   charts   -> Yahoo Finance      (historial BTC/ETH 7d para sparkline)
-#   market   -> Yahoo Finance      (Oro, Plata, S&P500, IBEX35, EUR/USD)
-#   weather  -> wttr.in (ciudad configurada arriba)
+#
+#   cryptos  — CoinMarketCap API (precios + rank de todas las cryptos)
+#   charts   — Yahoo Finance (historial BTC/ETH 7d para sparklines)
+#   market   — Yahoo Finance (Oro, Plata, S&P500, IBEX35, EUR/USD)
+#   weather  — wttr.in (temperatura y condicion meteorologica)
 # ---------------------------------------------------------------------------
 refresh:
-  cryptos: 300     #  5 min
-  charts:  300     #  5 min
-  market:  1800    # 30 min
-  weather: 1800    # 30 min
+  cryptos: 300     #  5 min  — CoinMarketCap
+  charts:  300     #  5 min  — Yahoo Finance sparklines
+  market:  1800    # 30 min  — Yahoo Finance mercado
+  weather: 1800    # 30 min  — wttr.in
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging:
   level: "INFO"          # DEBUG | INFO | WARNING | ERROR
-  file: "app.log"
-  max_bytes: 5242880     # 5 MB
-  backup_count: 3
+  file: "app.log"        # ruta relativa al directorio de trabajo (src/)
+  max_bytes: 5242880     # 5 MB por fichero antes de rotar
+  backup_count: 3        # numero de ficheros de backup rotados
