@@ -2,3 +2,4 @@ requests>=2.31.0
 matplotlib>=3.7.0
 yfinance>=0.2.40
 pyyaml>=6.0
+flask>=3.0.0
