@@ -49,11 +49,11 @@ class TopBar(tk.Frame):
         temp = w.get('temp_c')
         desc = w.get('description')
         if temp is not None and desc:
-            tiempo = f"Barcelona  {temp}°  {desc}"
+            tiempo = f"{self._weather.city}  {temp}°  {desc}"
         elif temp is not None:
-            tiempo = f"Barcelona  {temp}°"
+            tiempo = f"{self._weather.city}  {temp}°"
         else:
-            tiempo = "Barcelona  --"
+            tiempo = f"{self._weather.city}  --"
 
         self._label.config(text=f"  {hora}   -   {fecha}   -   {tiempo}  ")
         self.after(1000, self._tick)

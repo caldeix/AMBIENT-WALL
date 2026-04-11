@@ -6,6 +6,18 @@
 
 ---
 
+## [1.3.1] — 2026-04-12
+
+### Ciudad dinámica en top bar.
+
+#### Corregido
+
+- **`top_bar.py` — ciudad hardcodeada:** los tres estados del widget de tiempo
+  (`temp + desc`, solo `temp`, sin dato) mostraban `"Barcelona"` fijo en el string.
+  Corregido a `self._weather.city` para respetar `weather.city` del `config.yaml`.
+
+---
+
 ## [1.3.0] — 2026-04-12
 
 ### Instalación automática, hot-reload completo, mejoras de webapp y consolidación.
