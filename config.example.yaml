@@ -1,4 +1,4 @@
-# Crypto Wall Dashboard — Configuracion de ejemplo
+# Financial Wall Dashboard — Configuracion de ejemplo
 # Copia este archivo a config.yaml y rellena los valores.
 # IMPORTANTE: config.yaml esta en .gitignore — nunca commitear la API key real.
 

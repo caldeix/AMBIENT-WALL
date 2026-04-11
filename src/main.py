@@ -1,5 +1,5 @@
 """
-Crypto Wall Dashboard — Punto de entrada principal.
+Financial Wall Dashboard — Punto de entrada principal.
 Ejecutar: python src/main.py
 """
 import sys
@@ -107,7 +107,7 @@ def main():
     setup_logging(config.get('logging', {}))
     logger = logging.getLogger(__name__)
     logger.info("=" * 60)
-    logger.info("Crypto Wall Dashboard arrancando...")
+    logger.info("Financial Wall Dashboard arrancando...")
 
     # Validar intervalos mínimos por clave
     _REFRESH_MIN = {

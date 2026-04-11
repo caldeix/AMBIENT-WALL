@@ -1,5 +1,5 @@
 """
-Crypto Wall — App de configuración web.
+Financial Wall — App de configuración web.
 
 Ejecutar (independiente del dashboard):
     python app-config/server.py
@@ -54,6 +54,6 @@ def index():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
-    logger.info(f"Crypto Wall Config iniciando en http://0.0.0.0:{port}")
+    logger.info(f"Financial Wall Config iniciando en http://0.0.0.0:{port}")
     logger.info(f"Accede desde la red en http://<ip-dispositivo>:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)

@@ -1,8 +1,20 @@
-# CHANGELOG — Crypto Wall Dashboard
+# CHANGELOG — Financial Wall Dashboard
 
 > Registro de cambios siguiendo [Keep a Changelog](https://keepachangelog.com/es/1.1.0/).
 > Versiones en orden cronológico inverso. La documentación de arquitectura y configuración
 > completa está en el [README](README.md).
+
+---
+
+## [1.3.3] — 2026-04-12
+
+### Renombrado a Financial Wall.
+
+#### Cambiado
+
+- **Nombre del producto:** "Crypto Wall" → "Financial Wall" en todos los ficheros
+  (títulos, logs, scripts de instalación, webapp de configuración, README, CHANGELOG).
+  El nombre del directorio (`crypto_wall/`) no cambia.
 
 ---
 

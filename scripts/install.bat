@@ -1,5 +1,5 @@
 @echo off
-REM Crypto Wall Dashboard — Install script for Windows
+REM Financial Wall Dashboard — Install script for Windows
 REM Usage: double-click or run from cmd: scripts\install.bat
 
 setlocal enabledelayedexpansion
@@ -11,7 +11,7 @@ set "CONFIG_DST=%REPO_DIR%\config.yaml"
 
 echo.
 echo ========================================
-echo   Crypto Wall Dashboard - Instalacion
+echo   Financial Wall Dashboard - Instalacion
 echo ========================================
 echo.
 

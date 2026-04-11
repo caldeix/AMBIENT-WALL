@@ -19,7 +19,7 @@ class App(tk.Tk):
         fullscreen  = display.get('fullscreen', True)
         hide_cursor = display.get('hide_cursor', True)
 
-        self.title("Crypto Wall Dashboard")
+        self.title("Financial Wall Dashboard")
         self.configure(bg=BG_GLOBAL)
         self.resizable(False, False)
 

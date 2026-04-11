@@ -1,5 +1,5 @@
 #!/bin/bash
-# Crypto Wall Dashboard — Install script for Linux / Raspberry Pi
+# Financial Wall Dashboard — Install script for Linux / Raspberry Pi
 # Usage: bash scripts/install.sh
 
 set -e
@@ -11,7 +11,7 @@ CONFIG_DST="$REPO_DIR/config.yaml"
 
 echo ""
 echo "========================================"
-echo "  Crypto Wall Dashboard — Instalación"
+echo "  Financial Wall Dashboard — Instalación"
 echo "========================================"
 echo ""
 

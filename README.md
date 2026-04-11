@@ -1,24 +1,24 @@
-# Crypto Wall Dashboard
+# Financial Wall Dashboard
 
-![Version](https://img.shields.io/badge/version-1.3.2-blue)
+![Version](https://img.shields.io/badge/version-1.3.3-blue)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%204-red?logo=raspberry-pi&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Last update](https://img.shields.io/badge/last%20update-2026--04--12-lightgrey)
 
 > Tener un ojo en el mercado no debería obligarte a tener el móvil en la mano.
-> Crypto Wall convierte una pantalla spare en un ambient display permanente — cryptos,
+> Financial Wall convierte una pantalla spare en un ambient display permanente — cryptos,
 > materias primas e índices en tiempo real, con estética oscura pensada para quedarse
 > encendida 24/7 sin molestar.
 
-![Crypto Wall Dashboard](resources/img/frontwall.png)
+![Financial Wall Dashboard](resources/img/frontwall.png)
 
 ---
 
 ## Por qué existe esto
 
 La mayoría de dashboards de crypto son webs pensadas para sesiones cortas: abres, miras,
-cierras. Crypto Wall tiene el objetivo opuesto: una pantalla que siempre está ahí, en la
+cierras. Financial Wall tiene el objetivo opuesto: una pantalla que siempre está ahí, en la
 pared, legible de un vistazo desde cualquier punto de la habitación.
 
 El caso de uso es simple — una Raspberry Pi 4 con una pantalla de 10" o superior montada
