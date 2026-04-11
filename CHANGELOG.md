@@ -8,13 +8,24 @@
 
 ## [1.3.3] — 2026-04-12
 
-### Renombrado a Financial Wall.
+### Renombrado a Financial Wall, mejoras de documentación.
 
 #### Cambiado
 
 - **Nombre del producto:** "Crypto Wall" → "Financial Wall" en todos los ficheros
   (títulos, logs, scripts de instalación, webapp de configuración, README, CHANGELOG).
   El nombre del directorio (`crypto_wall/`) no cambia.
+
+- **README — sección webapp:** descripción detallada de las funciones de la webapp de
+  configuración (bloques sparkline, altcoin grid, refresco, entorno, hot-reload).
+  Añadida captura de pantalla (`resources/img/screenshot_appconfig.png`).
+
+- **README — crontab:** añadida la línea de autoarranque de la webapp (`server.py`)
+  junto a la del dashboard. La webapp arranca 1 segundo después (`sleep 16`) para
+  evitar conflictos de escritura en `config.yaml`.
+
+- **README — sección autor:** restaurados los créditos IA (Claude Code / Claude Sonnet 4.6)
+  junto a los datos del autor.
 
 ---
 

@@ -180,8 +180,19 @@ DISPLAY=:0 venv/bin/python app-config/server.py
 venv\Scripts\python app-config\server.py
 ```
 
-Abre `http://localhost:5001` en el navegador. El dashboard detecta cambios en `config.yaml`
-y se actualiza automáticamente (hot-reload).
+Abre `http://localhost:5001` en el navegador.
+
+![Financial Wall — Webapp de configuración](resources/img/screenshot_appconfig.png)
+
+La webapp permite editar toda la configuración sin tocar el YAML a mano:
+
+- **Bloques con sparkline** — reordenar por drag & drop, cambiar ticker, periodo y formato.
+- **Rejilla de altcoins** — buscar cualquier moneda del listado CMC (~3000), añadir por
+  drag & drop a la lista, reordenar con drag & drop interno.
+- **Intervalos de refresco** — editar los cuatro intervalos con sus mínimos indicados.
+- **Entorno y pantalla** — cambiar entre `mockup`, `test` y `pro`, activar fullscreen.
+- **Guardar** — escribe `config.yaml` en disco. El dashboard detecta el cambio y aplica
+  la nueva configuración automáticamente (hot-reload, sin reiniciar).
 
 ---
 
@@ -194,6 +205,7 @@ crontab -e
 Añadir al final:
 
 ```
+@reboot sleep 5 && /home/pi/crypto_wall/venv/bin/python /home/pi/crypto_wall/app-config/server.py >> /home/pi/crypto_wall/app-config/server.log 2>&1
 @reboot sleep 15 && DISPLAY=:0 XAUTHORITY=/home/pi/.Xauthority /home/pi/crypto_wall/venv/bin/python /home/pi/crypto_wall/src/main.py >> /home/pi/crypto_wall/src/app.log 2>&1
 ```
 
@@ -337,3 +349,17 @@ bash scripts/clean_pycache.sh    # Limpia __pycache__ antes de copiar al servido
 
 **Luis M. Caldeiro**
 Proyecto iniciado en marzo de 2026.
+
+---
+
+## Créditos IA
+
+Este proyecto fue diseñado e implementado íntegramente con asistencia de IA:
+
+> 🤖 Built with **[Claude Code](https://claude.ai/code)** — *Claude Sonnet 4.6* by Anthropic.
+> Arquitectura, servicios, widgets, formateo, layout y documentación generados en sesiones
+> de pair-programming con Claude Code en el IDE.
+
+---
+
+*Financial Wall Dashboard — ambient display para hodlers 24/7*
