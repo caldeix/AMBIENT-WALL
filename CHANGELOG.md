@@ -6,6 +6,31 @@
 
 ---
 
+## [1.5.0] — 2026-06-07
+
+### Colores personalizables por activo y sistema de notificaciones flotantes.
+
+#### Añadido
+
+- **Color personalizado por altcoin (Evolución 1):** cada crypto de la rejilla inferior puede tener un color de acento propio. Se aplica al badge de rank y a las siglas del ticker. Configurable desde la webapp con un color picker por símbolo; se persiste en `config.yaml → cryptos.colors`.
+
+- **Color de franja por chart block (Evolución 2):** la franja lateral de 4px de cada bloque de gráfico pasa a ser configurable por bloque (por defecto sigue usando el color del tipo: cian/ámbar/menta). Color picker en la webapp por slot; se persiste en `config.yaml → chart_blocks[n].color`.
+
+- **Sistema de notificaciones flotantes (Evolución 3):** banners en la parte superior central del dashboard cuando el precio de una crypto se mueve ≥ `spike_pct`% entre ciclos CMC (≈5 min).
+  - Nuevo widget `src/ui/widgets/notif_banner.py`: `NotifBanner(tk.Frame)` con icono parpadeante, auto-dismiss a los `duration_s` segundos, apilamiento vertical si hay varias alertas simultáneas.
+  - 8 niveles de intensidad de color según magnitud: 3% (azul) → 5% (amarillo) → 10-15% (naranja) → 20-100% (rojo escalonado), con velocidad de parpadeo proporcional.
+  - Configuración en `config.yaml → notifications: {enabled, spike_pct, duration_s}`.
+  - El primer ciclo CMC popula `_prev_prices` sin notificar para evitar falsas alarmas al arrancar.
+
+- **Skill `/deploy-servidor`:** comando de Claude Code (`.claude/commands/deploy-servidor.md`) que ejecuta el script `upload_raspberry.cmd` para desplegar en la Raspberry Pi.
+
+#### Cambiado
+
+- **`config.example.yaml`:** documentados los nuevos campos `chart_blocks[n].color`, `cryptos.colors` y la sección `notifications`.
+- **Skill `/actualiza-master`:** pasos refinados para incluir actualización de CHANGELOG y README antes de hacer los commits.
+
+---
+
 ## [1.4.1] — 2026-06-07
 
 ### Ajuste de colores de tinte dinámico de precio.
