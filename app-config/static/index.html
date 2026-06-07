@@ -76,6 +76,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); font
 .col-header .hint { font-weight: 400; color: var(--muted); text-transform: none; font-size: 11px; }
 .col-sub { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 
+/* ── Sort controls ─────────────────────────────────────────── */
+.sort-controls { display: flex; gap: 6px; margin-bottom: 4px; }
+.sort-btn {
+  flex: 1; padding: 4px 6px;
+  background: var(--bg-input); border: 1px solid var(--border2);
+  color: var(--muted); border-radius: var(--radius);
+  cursor: pointer; font-size: 11px; transition: all .15s;
+}
+.sort-btn:hover { border-color: var(--accent); color: var(--text); }
+.sort-btn.active { background: var(--border2); color: var(--text); border-color: var(--accent); }
+
 /* ── Tabs ──────────────────────────────────────────────────── */
 .tabs { display: flex; gap: 4px; }
 .tab {
@@ -334,6 +345,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); font
   <div class="col col-altcoins">
     <div class="col-header">Altcoin Grid <span class="hint">(solo CMC)</span></div>
     <div class="col-sub">Arrastra desde la columna izquierda (solo cryptos CMC)</div>
+    <div class="sort-controls">
+      <button class="sort-btn" id="sort-name-btn" onclick="sortAltcoins('name')">Az nombre</button>
+      <button class="sort-btn" id="sort-rank-btn" onclick="sortAltcoins('rank')"># rank</button>
+    </div>
     <div id="altcoin-drop" class="drop-area">
       <div class="empty-hint">Arrastra cryptos aquí</div>
     </div>
@@ -365,6 +380,7 @@ const state = {
   cmcPages:    0,
   cmcQuery:    '',
   searchTimer: null,
+  sortMode:    null,   // null | 'name' | 'rank'
 };
 
 // ================================================================
@@ -372,6 +388,7 @@ const state = {
 // ================================================================
 document.addEventListener('DOMContentLoaded', async () => {
   await loadConfig();
+  await enrichAltcoinsWithRanks();
   await loadCmcPage();
   renderAltcoins();
   renderChartSlots();
@@ -436,6 +453,21 @@ async function saveConfig() {
     setStatus('Error al guardar');
   } finally {
     btn.disabled = false;
+  }
+}
+
+async function enrichAltcoinsWithRanks() {
+  if (!state.altcoins.length) return;
+  const symbols = state.altcoins.map(a => a.symbol).join(',');
+  try {
+    const data = await apiFetch(`/api/cmc/ranks?symbols=${encodeURIComponent(symbols)}`);
+    state.altcoins = state.altcoins.map(a => ({
+      ...a,
+      rank: data[a.symbol]?.rank ?? a.rank,
+      name: a.name === a.symbol ? (data[a.symbol]?.name ?? a.symbol) : a.name,
+    }));
+  } catch (e) {
+    console.warn('enrichAltcoinsWithRanks:', e);
   }
 }
 
@@ -578,6 +610,30 @@ function buildAltItem(a, i) {
 
 function removeAltcoin(idx) {
   state.altcoins.splice(parseInt(idx), 1);
+  renderAltcoins();
+  reinitAltSort();
+}
+
+function sortAltcoins(mode) {
+  if (state.sortMode === mode) {
+    state.sortMode = null;
+  } else {
+    state.sortMode = mode;
+    if (mode === 'name') {
+      state.altcoins.sort((a, b) =>
+        (a.name || a.symbol).localeCompare(b.name || b.symbol)
+      );
+    } else if (mode === 'rank') {
+      state.altcoins.sort((a, b) => {
+        if (a.rank == null && b.rank == null) return 0;
+        if (a.rank == null) return 1;
+        if (b.rank == null) return -1;
+        return a.rank - b.rank;
+      });
+    }
+  }
+  document.getElementById('sort-name-btn').classList.toggle('active', state.sortMode === 'name');
+  document.getElementById('sort-rank-btn').classList.toggle('active', state.sortMode === 'rank');
   renderAltcoins();
   reinitAltSort();
 }

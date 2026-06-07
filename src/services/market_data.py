@@ -55,6 +55,31 @@ def _extract_history(hist, max_pts=60):
     return prices, [start_date, end_date]
 
 
+def _extract_ohlc(hist, max_candles=35):
+    """Extrae lista de tuplas (open, high, low, close) de un DataFrame yfinance.
+
+    Submuestrea a max_candles para que las velas quepan en el espacio compacto.
+    Devuelve (ohlc_list, [start_label, end_label]) o (None, None) si faltan columnas.
+    """
+    required = {'Open', 'High', 'Low', 'Close'}
+    if not required.issubset(hist.columns):
+        return None, None
+    df = hist[['Open', 'High', 'Low', 'Close']].dropna()
+    if df.empty:
+        return None, None
+    if len(df) > max_candles:
+        step = max(1, len(df) // max_candles)
+        df = df.iloc[::step]
+    ohlc = [
+        (float(row.Open), float(row.High), float(row.Low), float(row.Close))
+        for row in df.itertuples()
+    ]
+    idx = df.index
+    start_date = f"{idx[0].day} {idx[0].strftime('%b')}"
+    end_date   = f"{idx[-1].day} {idx[-1].strftime('%b')}"
+    return ohlc, [start_date, end_date]
+
+
 class MarketDataService:
     """Obtiene historial y precios de activos Yahoo Finance.
 
@@ -100,7 +125,7 @@ class MarketDataService:
         with self._lock:
             for block in blocks:
                 key = ticker_key(block['ticker'])
-                for suffix in ('price', 'history', 'history_dates', 'timestamp'):
+                for suffix in ('price', 'history', 'history_dates', 'ohlc', 'timestamp'):
                     self._cache.setdefault(f'{key}_{suffix}', None)
 
     def get_data(self):
@@ -124,13 +149,18 @@ class MarketDataService:
             clean  = hist['Close'].dropna()
             price  = float(clean.iloc[-1])
             prices, dates = _extract_history(hist, max_pts=max_pts)
+            ohlc, _       = _extract_ohlc(hist, max_candles=35)
             key = ticker_key(t)
             with self._lock:
                 self._cache[f'{key}_price']         = price
                 self._cache[f'{key}_history']       = prices
                 self._cache[f'{key}_history_dates'] = dates
+                self._cache[f'{key}_ohlc']          = ohlc
                 self._cache[f'{key}_timestamp']     = time.time()
-            logger.info(f"market_data: {t} {price:.4g} ({len(prices)} pts)")
+            logger.info(
+                f"market_data: {t} {price:.4g} "
+                f"({len(prices)} pts, {len(ohlc) if ohlc else 0} velas)"
+            )
         except ImportError:
             logger.error("market_data: yfinance no instalado")
             with self._lock:
