@@ -6,6 +6,19 @@
 
 ---
 
+## [1.4.1] — 2026-06-07
+
+### Ajuste de colores de tinte dinámico de precio.
+
+#### Cambiado
+
+- **`BG_CHANGE_DOWN`** `#150a08` → `#1f0808`: rojo oscuro más visible en pantalla física.
+- **`BG_CHANGE_UP`** `#091409` → `#0a1f0a`: verde oscuro con mayor brillo.
+- **`CLAUDE.md`**: añadidas normas de git — no hacer commit/push autónomo,
+  usar `/actualiza-master` para subir cambios.
+
+---
+
 ## [1.4.0] — 2026-06-07
 
 ### Velas japonesas, precio EUR, rediseño dark premium y ordenación de altcoins.

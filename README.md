@@ -1,10 +1,10 @@
 # Financial Wall Dashboard
 
-![Version](https://img.shields.io/badge/version-1.3.3-blue)
+![Version](https://img.shields.io/badge/version-1.4.1-blue)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%204-red?logo=raspberry-pi&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Last update](https://img.shields.io/badge/last%20update-2026--04--12-lightgrey)
+![Last update](https://img.shields.io/badge/last%20update-2026--06--07-lightgrey)
 
 > Tener un ojo en el mercado no debería obligarte a tener el móvil en la mano.
 > Financial Wall convierte una pantalla spare en un ambient display permanente — cryptos,

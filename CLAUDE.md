@@ -200,6 +200,10 @@ ticker_key('GC=F')    → 'gc_f'
 2. Registrar en `app-config/server.py` si es un archivo nuevo
 3. Consumir desde `app-config/static/index.html`
 
+### Modificar changelog
+1. Analizar la ultima entrada del changelog
+2. Añadir una nueva con lo faltante
+
 ---
 
 ## Comandos útiles
@@ -226,3 +230,13 @@ bash scripts/clean_pycache.sh
 - No usar `time.sleep()` en el hilo de Tkinter — usar `.after(ms, callback)`
 - No llamar `tk.mainloop()` explícitamente — lo gestiona `App.mainloop()`
 - No hacer `import *` — todos los imports son explícitos
+
+---
+
+## Normas de git para Claude
+
+- **Nunca hacer commit ni push de forma autónoma.** Siempre mostrar los cambios al usuario
+  y esperar confirmación explícita antes de cualquier operación git.
+- **Para subir cambios**, el usuario invocará `/actualiza-master` o pedirá expresamente
+  el push. No ejecutar comandos git por iniciativa propia aunque el trabajo esté terminado.
+- **No añadir `Co-Authored-By`** ni `Co-authored-by` en ningún mensaje de commit.
