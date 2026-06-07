@@ -49,7 +49,7 @@ class App(tk.Tk):
         self.grid_rowconfigure(0, weight=0, minsize=int(sh * 0.05))
         self.grid_rowconfigure(1, weight=1, minsize=int(sh * 0.95))
 
-        self.top_bar = TopBar(self, weather_service, bg='#000000')
+        self.top_bar = TopBar(self, weather_service)
         self.top_bar.grid(row=0, column=0, sticky='nsew')
 
         self.market_panel = MarketPanel(

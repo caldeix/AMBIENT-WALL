@@ -143,6 +143,22 @@ def get_coins():
     })
 
 
+@cmc_bp.get('/cmc/ranks')
+def get_ranks():
+    """Devuelve {SYMBOL: {rank, name}} para la lista de símbolos solicitada."""
+    _ensure_map()
+    symbols_param = request.args.get('symbols', '').strip()
+    if not symbols_param or not _map_data:
+        return jsonify({})
+    requested = {s.strip().upper() for s in symbols_param.split(',') if s.strip()}
+    result = {}
+    for coin in _map_data:
+        sym = coin['symbol'].upper()
+        if sym in requested:
+            result[sym] = {'rank': coin.get('rank'), 'name': coin.get('name', sym)}
+    return jsonify(result)
+
+
 @cmc_bp.post('/cmc/refresh')
 def refresh_map():
     api_key = _get_api_key()
