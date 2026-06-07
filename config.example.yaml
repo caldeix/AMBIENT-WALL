@@ -54,6 +54,9 @@ weather:
 #                  commodity  → $2.321,40 /oz
 #                  index      → 5.102,45 pts
 #                  index_int  → 11.234 pts  (IBEX, sin decimales)
+#   color      — (opcional) color hex de la franja lateral y acento del grafico.
+#                Si se omite, usa el color por defecto del tipo de activo.
+#                Ejemplos: "#ff6600", "#00aaff"
 # ---------------------------------------------------------------------------
 chart_blocks:
   - label: "BTC"
@@ -61,6 +64,7 @@ chart_blocks:
     period: "7d"
     cmc_symbol: "BTC"
     format: "crypto"
+    # color: "#ff9900"   # opcional — sobreescribe el acento cian por defecto
 
   - label: "ETH"
     ticker: "ETH-USD"
@@ -100,6 +104,9 @@ chart_blocks:
 # Los simbolos definidos en chart_blocks como cmc_symbol se excluyen automaticamente.
 #
 # Edita esta lista o usa la webapp para drag & drop.
+#
+# colors: (opcional) color personalizado por simbolo. Cambia el badge de rank
+#         y las siglas del ticker al color elegido. Se configura desde la webapp.
 # ---------------------------------------------------------------------------
 cryptos:
   symbols:
@@ -115,6 +122,9 @@ cryptos:
     - RAIL
     - ROSE
     - HSUITE
+  # colors:        # opcional — configurable desde la webapp
+  #   SOL: "#00ff88"
+  #   DOT: "#ff4466"
 
 # ---------------------------------------------------------------------------
 # Intervalos de refresco en segundos
@@ -132,6 +142,29 @@ refresh:
   charts:  300     #  5 min  — minimo permitido
   market:  1800    # 30 min  — minimo permitido
   weather: 1800    # 30 min  — minimo permitido
+
+# ---------------------------------------------------------------------------
+# Notificaciones flotantes de movimiento brusco de precio
+#
+# Los banners aparecen en la parte superior central del dashboard, apilados
+# verticalmente si hay varias alertas activas. Se auto-descartan a los
+# duration_s segundos.
+#
+# spike_pct  — movimiento minimo en un ciclo CMC (5 min) para disparar alerta
+# Colores segun intensidad del movimiento:
+#   >= 3%   → azul indigo   ⚡ (suave)
+#   >= 5%   → amarillo      ⚡
+#   >= 10%  → naranja       ⚠
+#   >= 15%  → naranja-rojo  ⚠
+#   >= 20%  → rojo          🚨
+#   >= 25%  → rojo vivo     🚨
+#   >= 50%  → rojo intenso  🚨
+#   >= 100% → rojo maximo   🚨
+# ---------------------------------------------------------------------------
+notifications:
+  enabled: true
+  spike_pct: 3.0     # umbral minimo de cambio (%) entre ciclos CMC para notificar
+  duration_s: 10     # segundos que permanece visible el banner
 
 # ---------------------------------------------------------------------------
 # Logging
