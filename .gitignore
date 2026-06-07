@@ -33,4 +33,7 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-.claude
+
+# Claude Code — ignorar todo excepto los comandos personalizados
+.claude/*
+!.claude/commands/
