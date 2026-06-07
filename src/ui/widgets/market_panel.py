@@ -23,6 +23,7 @@ from utils.formatting import (
     time_ago, freshness_color,
 )
 from services.market_data import DEFAULT_CHART_BLOCKS, ticker_key
+from ui.widgets.notif_banner import NotifBanner
 
 try:
     from matplotlib.figure import Figure
@@ -178,6 +179,9 @@ class MarketPanel(tk.Frame):
         self._alt_separator2   = None
         self._alt_grid_frame   = None
 
+        self._prev_prices    = {}   # {sym: float} para detección de spikes
+        self._active_banners = []   # NotifBanner activos en pantalla
+
         self._build_chart_container()
         self._build_alt_section()
         self._poll()
@@ -244,6 +248,11 @@ class MarketPanel(tk.Frame):
     def _make_chart_block(self, parent, block):
         btype              = _block_type(block)
         stripe_c, accent_c, bg = _block_accent_colors(btype)
+        # Evolución 2: color de franja configurable por bloque
+        custom_color = block.get('color')
+        if custom_color:
+            stripe_c = custom_color
+            accent_c = custom_color
         label              = block.get('label', block['ticker'])
 
         # Marco exterior
@@ -251,7 +260,8 @@ class MarketPanel(tk.Frame):
                          highlightbackground=BORDER, highlightthickness=1)
 
         # Stripe de color a la izquierda (4px)
-        tk.Frame(frame, bg=stripe_c, width=4).pack(side='left', fill='y')
+        stripe_frame = tk.Frame(frame, bg=stripe_c, width=4)
+        stripe_frame.pack(side='left', fill='y')
 
         # Contenido a la derecha del stripe
         content = tk.Frame(frame, bg=bg)
@@ -305,6 +315,7 @@ class MarketPanel(tk.Frame):
             'date_start': None, 'date_end': None,
             'accent_color': accent_c,
             'bg': bg,
+            'stripe_frame': stripe_frame,
             'content_frame': content,
             'header_frame': header,
             'eur_row_frame': eur_row,
@@ -535,6 +546,8 @@ class MarketPanel(tk.Frame):
         market = self._market.get_data()
         eurusd = market.get('eurusd_rate')
 
+        self._check_price_spikes(cmc)
+
         # --- Bloques de grafico ---
         for block in self._chart_blocks:
             t       = block['ticker']
@@ -605,6 +618,12 @@ class MarketPanel(tk.Frame):
             self._update_freshness(t, ts, interval)
 
         # --- Rejilla altcoins ---
+        # Evolución 1: colores personalizados por símbolo desde config
+        custom_colors = {}
+        if self._cfg_mgr:
+            cfg_now = self._cfg_mgr.get()
+            custom_colors = cfg_now.get('cryptos', {}).get('colors', {}) if cfg_now else {}
+
         for sym in self._alt_symbols:
             if sym not in self._alt_refs:
                 continue
@@ -626,12 +645,15 @@ class MarketPanel(tk.Frame):
                 pass
 
             # Ticker sin rank en el texto
-            ticker_lbl.config(text=sym)
+            custom_fg = custom_colors.get(sym) or custom_colors.get(sym.upper())
+            ticker_lbl.config(text=sym,
+                              fg=custom_fg if custom_fg else TEXT_SECONDARY)
 
             # Rank pill (ancho fijo, badge propio)
             if rank is not None:
                 bg_p, fg_p = _rank_badge_colors(rank)
-                rank_pill.config(text=f"#{rank}", bg=bg_p, fg=fg_p)
+                rank_pill.config(text=f"#{rank}", bg=bg_p,
+                                 fg=custom_fg if custom_fg else fg_p)
                 try:
                     rank_pill.pack_info()
                 except tk.TclError:
@@ -655,3 +677,76 @@ class MarketPanel(tk.Frame):
                 change_lbl.config(text=f"{sign}{abs(change_24):.1f}%", fg=color)
             else:
                 change_lbl.config(text="")
+
+    # ------------------------------------------------------------------
+    # Evolución 3 — Sistema de notificaciones flotantes
+    # ------------------------------------------------------------------
+
+    def _check_price_spikes(self, cmc_data):
+        """Detecta movimientos bruscos entre ciclos CMC y dispara banners."""
+        if not self._cfg_mgr:
+            return
+        cfg = self._cfg_mgr.get() or {}
+        notif_cfg = cfg.get('notifications', {})
+        if not notif_cfg.get('enabled', True):
+            return
+
+        spike_threshold = float(notif_cfg.get('spike_pct', 3.0))
+        duration_s      = int(notif_cfg.get('duration_s', 10))
+
+        # Todos los símbolos CMC visibles: chart blocks + altcoins
+        monitored = set()
+        for b in self._chart_blocks:
+            sym = b.get('cmc_symbol')
+            if sym:
+                monitored.add(sym.upper())
+        for sym in self._alt_symbols:
+            monitored.add(sym.upper())
+
+        for sym in monitored:
+            key   = sym.lower()
+            price = cmc_data.get(f'{key}_price')
+            if price is None:
+                continue
+
+            prev = self._prev_prices.get(sym)
+            if prev is not None and prev != price:
+                spike_pct = (price - prev) / prev * 100
+                if abs(spike_pct) >= spike_threshold:
+                    change_24  = cmc_data.get(f'{key}_change_24h')
+                    price_str  = fmt_usd(price, _auto_decimals(price))
+                    self._show_notification(sym, spike_pct, change_24, price_str, duration_s)
+
+            self._prev_prices[sym] = price
+
+    def _show_notification(self, sym, spike_pct, change_24h, price_str, duration_s=10):
+        """Crea un NotifBanner y lo posiciona en top-center de la ventana raíz."""
+        root = self.winfo_toplevel()
+
+        def on_dismiss(banner):
+            if banner in self._active_banners:
+                self._active_banners.remove(banner)
+            self._reposition_banners()
+
+        banner = NotifBanner(
+            root, sym, spike_pct, change_24h, price_str,
+            on_dismiss=on_dismiss,
+            duration_s=duration_s,
+        )
+        self._active_banners.append(banner)
+        self._reposition_banners()
+
+    def _reposition_banners(self):
+        """Reposiciona los banners activos apilados en top-center."""
+        BANNER_W = 520
+        BANNER_H = 52
+        GAP      = 6
+        root   = self.winfo_toplevel()
+        root_w = root.winfo_width()
+        x = max(0, (root_w - BANNER_W) // 2)
+        for i, banner in enumerate(self._active_banners):
+            y = 8 + i * (BANNER_H + GAP)
+            try:
+                banner.place(x=x, y=y, width=BANNER_W, height=BANNER_H)
+            except tk.TclError:
+                pass
