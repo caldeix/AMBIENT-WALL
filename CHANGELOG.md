@@ -6,6 +6,21 @@
 
 ---
 
+## [1.5.1] — 2026-06-07
+
+### Fix visual de banners de notificación.
+
+#### Corregido
+
+- **`notif_banner.py`:** banners demasiado oscuros y con borde de 1px imperceptible.
+  Rediseño completo: marco exterior coloreado (2px, actúa como borde vistoso),
+  fondo interior `#0f0f22`, franja lateral de 4px como los chart blocks, símbolo
+  en blanco brillante (`#eaeaf5`), porcentaje y 24h en el color de alerta, precio
+  en `Courier` blanco. Colores de alerta más saturados y brillantes (rojo `#ff4444`,
+  naranja `#ffaa00`, amarillo `#ffee00`, azul `#44aaff`).
+
+---
+
 ## [1.5.0] — 2026-06-07
 
 ### Colores personalizables por activo y sistema de notificaciones flotantes.
