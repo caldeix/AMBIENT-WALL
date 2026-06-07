@@ -243,6 +243,15 @@ body { background: var(--bg); color: var(--text); font-family: var(--font); font
 #toast.error   { background: #2e0d15; color: var(--neg); border: 1px solid var(--neg); }
 #toast.info    { background: #0d1a2e; color: var(--accent); border: 1px solid var(--accent); }
 
+/* ── Color picker ──────────────────────────────────────────── */
+.color-pick {
+  width: 22px; height: 22px; padding: 0; border: none;
+  border-radius: 4px; cursor: pointer; background: none; flex-shrink: 0;
+  outline: 1px solid var(--border2);
+}
+.color-pick::-webkit-color-swatch-wrapper { padding: 2px; }
+.color-pick::-webkit-color-swatch { border-radius: 3px; border: none; }
+
 /* ── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -403,7 +412,10 @@ async function loadConfig() {
   try {
     const cfg = await apiFetch('/api/config');
     state.config = cfg;
-    state.altcoins    = (cfg.cryptos?.symbols || []).map(s => ({ symbol: s, name: s, rank: null }));
+    const colors = cfg.cryptos?.colors || {};
+    state.altcoins = (cfg.cryptos?.symbols || []).map(s => ({
+      symbol: s, name: s, rank: null, color: colors[s] || null,
+    }));
     state.chartBlocks = (cfg.chart_blocks || []).map(b => ({ ...b, _status: 'ok' }));
     populateSettings(cfg);
   } catch (e) {
@@ -439,6 +451,9 @@ async function saveConfig() {
     },
     cryptos: {
       symbols: state.altcoins.map(a => a.symbol),
+      colors: Object.fromEntries(
+        state.altcoins.filter(a => a.color).map(a => [a.symbol, a.color])
+      ),
     },
     chart_blocks: state.chartBlocks.map(({ _status, ...b }) => b),
   };
@@ -600,12 +615,27 @@ function renderAltcoins() {
 }
 
 function buildAltItem(a, i) {
+  const color = a.color || '#5a5a88';
   return `<div class="asset-item" data-idx="${i}" data-symbol="${esc(a.symbol)}">
     <span class="rank">${a.rank ? '#' + a.rank : ''}</span>
-    <span class="symbol">${esc(a.symbol)}</span>
+    <span class="symbol" style="color:${esc(color)}">${esc(a.symbol)}</span>
     <span class="name">${esc(a.name)}</span>
+    <input type="color" class="color-pick" value="${esc(color)}" title="Color del símbolo"
+           oninput="updateAltColor(${i}, this.value)" onclick="event.stopPropagation()">
     <button class="remove-btn" data-idx="${i}">×</button>
   </div>`;
+}
+
+function updateAltColor(idx, color) {
+  if (state.altcoins[idx]) state.altcoins[idx].color = color;
+  // Actualizar preview del símbolo en tiempo real
+  const area  = document.getElementById('altcoin-drop');
+  const items = area.querySelectorAll('.asset-item[data-symbol]');
+  const item  = Array.from(items).find(el => el.dataset.idx == idx);
+  if (item) {
+    const sym = item.querySelector('.symbol');
+    if (sym) sym.style.color = color;
+  }
 }
 
 function removeAltcoin(idx) {
@@ -651,24 +681,47 @@ function renderChartSlots() {
   }
 }
 
+function _blockDefaultColor(block) {
+  const fmt = block.format || '';
+  if (fmt === 'commodity') return '#f5a623';
+  if (fmt === 'index' || fmt === 'index_int') return '#00e676';
+  return '#00d4ff';
+}
+
 function buildChartSlot(block, i) {
   const div = document.createElement('div');
   div.className = 'chart-slot';
   div.dataset.idx = i;
-  const statusClass = block._status === 'ok' ? 'ok' : block._status === 'loading' ? 'loading' : 'error';
-  const statusIcon  = block._status === 'ok' ? '✓' : block._status === 'loading' ? '◌' : '✗';
+  const statusClass  = block._status === 'ok' ? 'ok' : block._status === 'loading' ? 'loading' : 'error';
+  const statusIcon   = block._status === 'ok' ? '✓' : block._status === 'loading' ? '◌' : '✗';
+  const blockColor   = block.color || _blockDefaultColor(block);
   div.innerHTML = `
     <span class="slot-num">${i + 1}</span>
-    <span class="slot-symbol">${esc(block.cmc_symbol || block.ticker)}</span>
+    <span class="slot-symbol" style="color:${esc(blockColor)}">${esc(block.cmc_symbol || block.ticker)}</span>
     <input class="slot-label-input" value="${esc(block.label)}" placeholder="Label"
            onchange="updateBlockLabel(${i}, this.value)">
     <select class="period-select" onchange="updateBlockPeriod(${i}, this.value)">
       <option value="7d"  ${block.period === '7d'  ? 'selected' : ''}>7d</option>
       <option value="1mo" ${block.period === '1mo' ? 'selected' : ''}>1mo</option>
     </select>
+    <input type="color" class="color-pick" value="${esc(blockColor)}" title="Color de franja"
+           oninput="updateBlockColor(${i}, this.value)">
     <span class="slot-status ${statusClass}">${statusIcon}</span>
     <button class="remove-btn" onclick="removeChartBlock(${i})">×</button>`;
   return div;
+}
+
+function updateBlockColor(idx, color) {
+  if (state.chartBlocks[idx]) {
+    state.chartBlocks[idx].color = color;
+    // Actualizar preview del símbolo en tiempo real
+    const wrap = document.getElementById('chart-slots-wrap');
+    const slot = wrap.querySelector(`.chart-slot[data-idx="${idx}"]`);
+    if (slot) {
+      const sym = slot.querySelector('.slot-symbol');
+      if (sym) sym.style.color = color;
+    }
+  }
 }
 
 function buildEmptySlot(i) {
