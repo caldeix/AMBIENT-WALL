@@ -6,6 +6,81 @@
 
 ---
 
+## [1.4.0] — 2026-06-07
+
+### Velas japonesas, precio EUR, rediseño dark premium y ordenación de altcoins.
+
+#### Añadido
+
+- **Velas japonesas en los 6 chart blocks:** reemplazo completo de los sparklines lineales
+  por gráficos de candlestick. Máximo 35 velas con submuestreo automático si el historial
+  es más largo.
+  - `market_data.py`: nueva función `_extract_ohlc()` extrae tuplas `(open, high, low, close)`
+    del DataFrame de yfinance.
+  - `market_panel.py`: `_draw_candles()` dibuja cuerpos con `mpatches.Rectangle` y mechas
+    con `ax.plot` (linewidth 0.7). Verde (`POSITIVE`) si cierre ≥ apertura, rojo (`NEGATIVE`)
+    si cierre < apertura. Doji (variación < 0,15% del rango) se representa como guión horizontal.
+  - Fallback automático a gráfico lineal si los datos OHLC no están disponibles.
+
+- **Precio EUR en el header de cada chart block:** etiqueta pequeña debajo del precio USD
+  principal, calculada con el tipo EUR/USD en tiempo real. Solo se muestra en bloques con
+  `cmc_symbol` (cryptos); commodities e índices quedan en blanco.
+
+- **Fondo dinámico por dirección de precio (24h):** tinte sutil aplicado tanto a los
+  chart blocks como a cada celda de la rejilla de altcoins según el cambio porcentual de
+  las últimas 24 horas:
+  - Subida → `BG_CHANGE_UP = #091409` (verde muy oscuro)
+  - Bajada → `BG_CHANGE_DOWN = #150a08` (cálido oscuro)
+  - Sin dato → fondo neutro por tipo de activo
+
+- **Ordenación de altcoins en la webapp:** dos botones encima de la lista de drag & drop:
+  - *Az nombre* — ordena alfabéticamente por nombre
+  - *# rank* — ordena por posición en CoinMarketCap (ascendente; sin rank al final)
+  - Nuevo endpoint `GET /api/cmc/ranks?symbols=BTC,ETH,...` devuelve `{SYMBOL: {rank, name}}`
+    consultando el mapa local CMC. Se llama al arrancar la webapp para enriquecer los ítems
+    cargados desde `config.yaml` (que solo tienen el símbolo, sin rank).
+
+- **Rank badge de ancho fijo en la rejilla de altcoins:** la etiqueta del rank usa
+  `width=5, anchor='center'` para que `#1`, `#55` y `#1234` ocupen el mismo espacio
+  horizontal y la columna quede alineada visualmente.
+
+- **`CLAUDE.md`:** documento de contexto para Claude Code en la raíz del proyecto.
+  Incluye árbol de archivos, diagrama de flujo de datos, config system, theme system,
+  estructura interna de `market_panel.py` y patrones a seguir al modificar el código.
+
+- **Skill `/actualiza-master`:** comando personalizado de Claude Code en
+  `.claude/commands/actualiza-master.md`. Agrupa los cambios pendientes por área lógica,
+  crea commits descriptivos sin líneas `Co-Authored-By`, hace merge a master y push a GitHub.
+
+#### Cambiado
+
+- **Rediseño visual completo (dark terminal premium):**
+  - `theme.py` reescrito con paleta inspirada en Bloomberg + exchanges crypto: fondos
+    diferenciados por tipo de activo (`BG_PANEL_CRYPTO`, `BG_PANEL_COMMODITY`,
+    `BG_PANEL_INDEX`), colores de acento eléctrico por tipo (cian / ámbar / menta),
+    separadores de doble línea con efecto glow.
+  - `top_bar.py`: tres labels independientes con colores distintos (reloj blanco,
+    fecha gris-azul, clima cian) en lugar de un label combinado. Separador inferior
+    doble `SEP_BRIGHT` + `SEP_DARK`.
+  - `market_panel.py`: stripe de color de 4 px en el borde izquierdo de cada chart block
+    según tipo de activo; rank badge como píldora con fondo `RANK_OTHER_BG` uniforme
+    (sin distinción por tier); zebra en la rejilla de altcoins (`BG_ALT_ROW_ODD` /
+    `BG_ALT_ROW_EVEN`); indicadores ▲/▼ en los cambios 24h con `POSITIVE` / `NEGATIVE`.
+
+- **`app.py`:** eliminado `bg='#000000'` hardcodeado en la instanciación de `TopBar`;
+  ahora hereda `TOPBAR_BG` del theme.
+
+- **`.gitignore`:** cambiado `.claude` (directorio completo ignorado) por `.claude/*`
+  con excepción `!.claude/commands/` para que los comandos personalizados se versionen.
+
+#### Corregido
+
+- **Ordenación por rank en la webapp no funcionaba:** los ítems cargados desde `config.yaml`
+  tenían `rank: null` porque el config solo almacena símbolos. Corregido enriqueciendo los
+  ranks al arrancar la webapp con el nuevo endpoint `/api/cmc/ranks`.
+
+---
+
 ## [1.3.3] — 2026-04-12
 
 ### Renombrado a Financial Wall, mejoras de documentación.
