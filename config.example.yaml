@@ -163,7 +163,7 @@ refresh:
 # ---------------------------------------------------------------------------
 notifications:
   enabled: true
-  spike_pct: 3.0     # umbral minimo de cambio (%) entre ciclos CMC para notificar
+  spike_pct: 1.0     # umbral minimo de cambio (%) entre ciclos CMC para notificar
   duration_s: 10     # segundos que permanece visible el banner
 
 # ---------------------------------------------------------------------------
